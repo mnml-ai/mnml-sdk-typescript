@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 
 import type { WebhookEvent } from './types.js';
 
-export type { WebhookEvent } from './types.js';
+export type { CreditsLow, WebhookEvent, WebhookEventType } from './types.js';
 
 /**
  * Verify a webhook delivery: the Standard Webhooks scheme the API signs with
@@ -40,13 +40,16 @@ export function signWebhook(
   return `v1,${createHmac('sha256', key).update(`${id}.${timestampSecs}.${body}`).digest('base64')}`;
 }
 
-/** The parsed event, or a throw when the signature or the timestamp does not hold. */
-export function verifyWebhook<T = unknown>(
+/**
+ * The parsed event, or a throw when the signature or the timestamp does not
+ * hold. Narrow on `event.type` to read `event.data`.
+ */
+export function verifyWebhook(
   rawBody: string | Uint8Array,
   headers: Headers,
   secret: string,
   now: Date = new Date(),
-): WebhookEvent<T> {
+): WebhookEvent {
   const body = typeof rawBody === 'string' ? rawBody : new TextDecoder().decode(rawBody);
   const id = header(headers, 'webhook-id');
   const ts = header(headers, 'webhook-timestamp');
@@ -63,5 +66,5 @@ export function verifyWebhook<T = unknown>(
     return got.length === expected.length && timingSafeEqual(got, expected);
   });
   if (!ok) throw new WebhookVerificationError('Webhook signature does not match.');
-  return JSON.parse(body) as WebhookEvent<T>;
+  return JSON.parse(body) as WebhookEvent;
 }

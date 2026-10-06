@@ -203,4 +203,78 @@ describe('Mnml', () => {
     await mnml.uploads.create({ url: 'https://e.com/a.png' });
     expect(JSON.parse(f.calls[1]!.init.body as string)).toEqual({ url: 'https://e.com/a.png' });
   });
+
+  it('starts a render and waits for every job its count started', async () => {
+    vi.useFakeTimers();
+    const job = (id: string, status: string) => ok({ id, status, outputs: [] });
+    const f = fakeFetch([
+      ok(
+        {
+          id: '1',
+          ids: ['1', '2'],
+          status: 'queued',
+          credits_charged: 2,
+          replayed: false,
+          notes: [],
+        },
+        202,
+      ),
+      job('1', 'processing'),
+      job('2', 'succeeded'),
+      job('1', 'succeeded'),
+    ]);
+    const mnml = new Mnml({ apiKey: 'k', fetch: f.impl });
+    const p = mnml.renders.createAndWait(
+      { prompt: 'x', count: 2 },
+      { idempotencyKey: 'brief-1', intervalMs: 1000 },
+    );
+    await vi.advanceTimersByTimeAsync(1000);
+    const jobs = await p;
+    expect(jobs.map((j) => [j.id, j.status])).toEqual([
+      ['1', 'succeeded'],
+      ['2', 'succeeded'],
+    ]);
+    expect(header(f.calls[0]!, 'idempotency-key')).toBe('brief-1');
+    expect(f.calls.slice(1).every((c) => c.init.method === 'GET')).toBe(true);
+  });
+
+  it('starts an edit and returns the settled job', async () => {
+    const f = fakeFetch([
+      ok({ id: '5', status: 'queued', credits_charged: 1, replayed: false, notes: [] }, 202),
+      ok({ id: '5', status: 'failed', outputs: [], error: { code: 'NO_CHANGE', message: 'm' } }),
+    ]);
+    const job = await new Mnml({ apiKey: 'k', fetch: f.impl }).edits.createAndWait({
+      job_id: '3',
+      prompt: 'Dark brick',
+    });
+    expect(job).toMatchObject({ id: '5', status: 'failed' });
+    expect(f.calls[1]!.url).toBe('https://api.mnml.ai/v1/jobs/5');
+  });
+
+  it('downloads an output without sending the key', async () => {
+    const f = fakeFetch([
+      new Response(new Uint8Array([137, 80, 78, 71]), {
+        status: 200,
+        headers: { 'content-type': 'image/png' },
+      }),
+    ]);
+    const mnml = new Mnml({ apiKey: 'mk_live_x', fetch: f.impl });
+    const url = 'https://api.mnml.ai/v1/files/9?exp=1&sig=abc';
+    const file = await mnml.files.download({ url, media: 'image', expires_at: 'x' });
+    expect([...file.data]).toEqual([137, 80, 78, 71]);
+    expect(file.contentType).toBe('image/png');
+    expect(f.calls[0]!.url).toBe(url);
+    expect(header(f.calls[0]!, 'authorization')).toBeUndefined();
+  });
+
+  it('throws NOT_FOUND for an expired output link', async () => {
+    const f = fakeFetch([fail(404, 'NOT_FOUND')]);
+    const mnml = new Mnml({ apiKey: 'k', fetch: f.impl });
+    await expect(
+      mnml.files.download('https://api.mnml.ai/v1/files/9?exp=1&sig=x'),
+    ).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+      status: 404,
+    });
+  });
 });

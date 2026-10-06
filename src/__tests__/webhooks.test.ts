@@ -55,4 +55,20 @@ describe('webhook verification', () => {
     ).toThrow(/too old/);
     expect(() => verifyWebhook(body, {}, SECRET, now)).toThrow(/Missing/);
   });
+
+  it('narrows the event on its type', () => {
+    const low = JSON.stringify({
+      type: 'credits.low',
+      timestamp: now.toISOString(),
+      data: { balance: 40, threshold: 100 },
+    });
+    const event = verifyWebhook(
+      low,
+      { ...headers, 'webhook-signature': signWebhook(SECRET, 'msg_1', ts, low) },
+      SECRET,
+      now,
+    );
+    if (event.type !== 'credits.low') throw new Error('expected credits.low');
+    expect(event.data.balance).toBeLessThan(event.data.threshold);
+  });
 });

@@ -4,9 +4,11 @@ The official TypeScript and JavaScript client for the [mnml API](https://develop
 architecture renders, edits, enhancements and video, from your own product.
 
 - Typed requests and answers, checked against the API's OpenAPI document
+- Every endpoint of API v1: renders, edits, enhancements, video, uploads, jobs, account, engines
 - Retries, timeouts and idempotency keys handled for you
-- `jobs.wait()` to poll a job until it settles
-- Webhook signature verification
+- `createAndWait()` and `jobs.wait()` to poll a job until it settles, `files.download()` to keep
+  its output
+- Webhook signature verification, with typed events
 - No dependencies. Node 18+, Deno, Bun, edge runtimes and browsers
 
 ```bash
@@ -22,14 +24,12 @@ import { Mnml } from '@mnml-ai/sdk';
 
 const mnml = new Mnml(); // reads MNML_API_KEY
 
-const { id } = await mnml.renders.create({
+const [job] = await mnml.renders.createAndWait({
   mode: 'exterior',
   image_url: 'https://example.com/massing.png',
   prompt: 'Timber facade, late afternoon light, olive trees',
 });
-
-const job = await mnml.jobs.wait(id);
-console.log(job.status, job.outputs[0]?.url);
+console.log(job?.status, job?.outputs[0]?.url);
 ```
 
 Every call spends credits from your prepaid API balance. Top it up in dollars on
@@ -50,21 +50,36 @@ site's origins on the [API keys](https://developers.mnml.ai/console/keys) page.
 
 ## Methods
 
-| Method                      | Endpoint                    | What it does                                        |
-| --------------------------- | --------------------------- | --------------------------------------------------- |
-| `renders.create(body)`      | `POST /v1/renders`          | Render from an image, or from a prompt alone        |
-| `edits.create(body)`        | `POST /v1/edits`            | Edit or erase, over the whole image or a region     |
-| `enhancements.create(body)` | `POST /v1/enhancements`     | Upscale, enhance, remove the background, outpaint   |
-| `videos.create(body)`       | `POST /v1/videos`           | Video from a still                                  |
-| `uploads.create(input)`     | `POST /v1/uploads`          | Upload an image to use as a source or mask          |
-| `jobs.get(id)`              | `GET /v1/jobs/{id}`         | Read a job                                          |
-| `jobs.wait(id, options?)`   | `GET /v1/jobs/{id}`         | Read a job until it succeeds, fails or is cancelled |
-| `jobs.cancel(id)`           | `POST /v1/jobs/{id}/cancel` | Cancel a job (refunded if it had not produced yet)  |
-| `account.get()`             | `GET /v1/account`           | Balance, tier and limits for this key               |
-| `engines.list()`            | `GET /v1/engines`           | Engines, video models, prices and capabilities      |
+| Method                                 | Endpoint                    | What it does                                        |
+| -------------------------------------- | --------------------------- | --------------------------------------------------- |
+| `renders.create(body)`                 | `POST /v1/renders`          | Render from an image, or from a prompt alone        |
+| `edits.create(body)`                   | `POST /v1/edits`            | Edit or erase, over the whole image or a region     |
+| `enhancements.create(body)`            | `POST /v1/enhancements`     | Upscale, enhance, remove the background, outpaint   |
+| `videos.create(body)`                  | `POST /v1/videos`           | Video from a still                                  |
+| `uploads.create(input)`                | `POST /v1/uploads`          | Upload an image to use as a source or mask          |
+| `jobs.get(id)`                         | `GET /v1/jobs/{id}`         | Read a job                                          |
+| `jobs.cancel(id)`                      | `POST /v1/jobs/{id}/cancel` | Cancel a job (refunded if it had not produced yet)  |
+| `account.get()`                        | `GET /v1/account`           | Balance, tier and limits for this key               |
+| `engines.list()`                       | `GET /v1/engines`           | Engines, video models, prices and capabilities      |
+| `files.download(output)`               | `GET /v1/files/{id}`        | A job output's bytes, from its signed link          |
+| `jobs.wait(id, options?)`              | `GET /v1/jobs/{id}`         | Read a job until it succeeds, fails or is cancelled |
+| `jobs.waitAll(ids, options?)`          | `GET /v1/jobs/{id}`         | `wait` for several jobs at once                     |
+| `<resource>.createAndWait(body, opt?)` | the create, then the job    | Start a job and wait for it (a render: every job)   |
 
 Every method returns the answer's `data`, and takes an optional last argument
-`{ idempotencyKey?, signal? }`.
+`{ idempotencyKey?, signal? }`. `createAndWait` is on `renders`, `edits`, `enhancements` and
+`videos`; a render returns one job per `count`, the others one job.
+
+### Engines, modes and settings
+
+`engine`, `mode`, `aspect_ratio`, `camera_movement`, `motion` and the video `model` are typed
+with the values the API takes, so your editor completes them. `engines.list()` is the live list,
+with each engine's price and what it can do:
+
+```ts
+const { engines, video_models } = await mnml.engines.list();
+for (const e of engines) console.log(e.id, e.prices.render, e.capabilities.max_references);
+```
 
 ### Sources
 
@@ -94,6 +109,35 @@ await mnml.renders.create({ upload_id: upload.id, prompt: 'Concrete and glass, o
 await mnml.uploads.create({ url: 'https://example.com/massing.png' });
 ```
 
+### Edits, enhancements and video
+
+```ts
+// Change one thing, inside a box (fractions of the image from its top-left)
+await mnml.edits.create({
+  job_id: id,
+  prompt: 'A red front door',
+  region: { box: { x: 0.4, y: 0.5, width: 0.2, height: 0.4 } },
+});
+
+// Remove what a region covers
+await mnml.edits.create({
+  job_id: id,
+  kind: 'erase',
+  region: { box: { x: 0.1, y: 0.6, width: 0.2, height: 0.3 } },
+});
+
+// Upscale, enhance, cut out, or extend to a new frame
+await mnml.enhancements.create({ job_id: id, kind: 'outpaint', aspect_ratio: '16:9' });
+
+// A ten-second camera move
+await mnml.videos.create({
+  job_id: id,
+  model: 'v2.0-flash',
+  duration_seconds: 10,
+  camera_movement: 'orbit-right',
+});
+```
+
 ### Waiting for a job
 
 ```ts
@@ -101,8 +145,22 @@ const job = await mnml.jobs.wait(id, { intervalMs: 3000, timeoutMs: 10 * 60_000 
 ```
 
 `jobs.wait` throws `MnmlTimeoutError` when its own time runs out. The job keeps running, so
-read it again later. Output links are signed and expire after an hour or two; download what
-you want to keep. For long jobs such as video, prefer a [webhook](#webhooks) to polling.
+read it again later. `videos.createAndWait` reads every 10 seconds for up to 20 minutes unless
+you say otherwise. For long jobs such as video, a [webhook](#webhooks) beats polling.
+
+### Downloading outputs
+
+Output links are signed and expire after an hour or two. Download what you want to keep:
+
+```ts
+import { writeFile } from 'node:fs/promises';
+
+const file = await mnml.files.download(job.outputs[0]!);
+await writeFile(`render.${file.contentType?.split('/')[1] ?? 'jpg'}`, file.data);
+```
+
+The link's signature is its credential, so your key is not sent with it. An expired link throws
+`MnmlError` with `NOT_FOUND`; read the job again for fresh links.
 
 ## Errors
 
@@ -157,6 +215,8 @@ export async function POST(request: Request) {
   );
   if (event.type === 'job.succeeded') {
     // event.data is the job, as jobs.get returns it
+  } else if (event.type === 'credits.low') {
+    // event.data is { balance, threshold }
   }
   return new Response(null, { status: 204 });
 }
@@ -164,16 +224,44 @@ export async function POST(request: Request) {
 
 `verifyWebhook` throws `WebhookVerificationError` on a bad signature or a stale timestamp
 (over five minutes). Events: `job.succeeded`, `job.failed`, `job.canceled`, `credits.low` and
-`webhook.test`. The scheme is [Standard Webhooks](https://www.standardwebhooks.com). The
+`webhook.test`; `WebhookEvent` narrows `data` on `type`. The scheme is [Standard Webhooks](https://www.standardwebhooks.com). The
 webhook helpers use `node:crypto`, so they have their own entry point and stay out of browser
 bundles. See [`examples/`](./examples) for Express.
 
 ## TypeScript
 
 Request and answer types are exported: `CreateRender`, `Job`, `JobStatus`, `Account`,
-`Engines`, `WebhookEvent` and more. A test in this repository checks every field against the
+`Engines`, `EngineId`, `CameraMovement`, `WebhookEvent` and more. A test in this repository checks every field against the
 API's OpenAPI document ([`spec/openapi.json`](./spec/openapi.json)), so the types cannot drift
 from the API.
+
+## Moving from the v3 API
+
+The v3 routes (`/v1/archDiffusion-v46`, `/v1/upscale`, `/v1/status/{id}` …) still answer on
+`api.mnml.ai`, deprecated, so nothing breaks while you move. The SDK speaks API v1 only. Each
+old route has a v1 call that does the same job:
+
+| v3 route                                                      | SDK call                                                      |
+| ------------------------------------------------------------- | ------------------------------------------------------------- |
+| `archDiffusion-v46`                                           | `renders.create({ engine: 'v4.6-ultra', … })`                 |
+| `archDiffusion-v45`, `-v45-lite`                              | `renders.create({ engine: 'v4.5-ultra' })`, `'v4.5-fast'`     |
+| `archDiffusion-v44`, `-v44-lite`                              | `renders.create({ engine: 'v4.4-ultra' })`, `'v4.4-fast'`     |
+| `archDiffusion-v43`, `-v43-lite`, `-v42`, `-v42-lite`, `-v41` | `renders.create({ engine: 'v4.3' })`, `'v4.3-fast'`           |
+| `mixture-of-experts`                                          | `renders.create({ mode, … })` (`expert_name` is the `mode`)   |
+| `exterior`, `interior`, `sketch-to-img`                       | `renders.create({ engine: 'v3.1', mode, … })`                 |
+| `style/transfer`                                              | `renders.create({ references: [{ …, mode: 'style' }], … })`   |
+| `imagine-ai`                                                  | `renders.create({ mode: 'text-to-render', prompt })`          |
+| `virtual-staging-ai` (v1 and v2)                              | `renders.create({ mode: 'interior', … })`                     |
+| `inpaint`                                                     | `edits.create({ prompt, mask_upload_id })` or `region`        |
+| `ai-eraser`                                                   | `edits.create({ kind: 'erase', region })`                     |
+| `upscale`, `render/enhancer`                                  | `enhancements.create({ kind: 'upscale' })`, `kind: 'enhance'` |
+| `video-v20-flash`, `video-v20-cinematic`, `video-ai`          | `videos.create({ model: 'v2.0-flash' })`, `'v2.0'`, `'v1.1'`  |
+| `status/{id}` (v1 and v2)                                     | `jobs.get(id)` or `jobs.wait(id)`                             |
+| `credits`                                                     | `account.get()`                                               |
+
+v3 sent the image in the request; v1 takes an `upload_id` (from `uploads.create`), a public
+`image_url` or a finished `job_id`. The full guide is at
+[developers.mnml.ai/docs/migrate](https://developers.mnml.ai/docs/migrate).
 
 ## Links
 

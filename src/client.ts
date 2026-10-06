@@ -8,6 +8,7 @@ import type {
   Engines,
   Job,
   JobCanceled,
+  JobOutput,
   JobStarted,
   RenderStarted,
   Upload,
@@ -47,6 +48,14 @@ export interface WaitOptions {
   timeoutMs?: number;
   signal?: AbortSignal;
 }
+
+export interface DownloadedFile {
+  data: Uint8Array;
+  contentType: string | null;
+}
+
+/** `create` and then `jobs.wait`: the idempotency key for the create, the wait's own options. */
+export type CreateAndWaitOptions = Pick<RequestOptions, 'idempotencyKey'> & WaitOptions;
 
 export type UploadInput =
   | { file: Blob | ArrayBuffer | Uint8Array; filename?: string; purpose?: 'image' | 'mask' }
@@ -149,24 +158,39 @@ export class Mnml {
   readonly renders = {
     create: (body: CreateRender, opts?: RequestOptions) =>
       this.request<RenderStarted>('POST', '/v1/renders', { json: body, ...opts }),
+    /** Starts the render and waits for every job it started (one per `count`). */
+    createAndWait: async (body: CreateRender, opts: CreateAndWaitOptions = {}): Promise<Job[]> => {
+      const started = await this.renders.create(body, startOptions(opts));
+      return this.jobs.waitAll(started.ids, opts);
+    },
   };
 
   /** Prompt edits and erasing, over the whole image or a region. */
   readonly edits = {
     create: (body: CreateEdit, opts?: RequestOptions) =>
       this.request<JobStarted>('POST', '/v1/edits', { json: body, ...opts }),
+    createAndWait: async (body: CreateEdit, opts: CreateAndWaitOptions = {}): Promise<Job> =>
+      this.jobs.wait((await this.edits.create(body, startOptions(opts))).id, opts),
   };
 
   /** Upscale, enhance, background removal and outpainting. */
   readonly enhancements = {
     create: (body: CreateEnhancement, opts?: RequestOptions) =>
       this.request<JobStarted>('POST', '/v1/enhancements', { json: body, ...opts }),
+    createAndWait: async (body: CreateEnhancement, opts: CreateAndWaitOptions = {}): Promise<Job> =>
+      this.jobs.wait((await this.enhancements.create(body, startOptions(opts))).id, opts),
   };
 
-  /** Video from a still image. */
+  /** Video from a still image. A clip takes minutes: wait with a longer `intervalMs`. */
   readonly videos = {
     create: (body: CreateVideo, opts?: RequestOptions) =>
       this.request<JobStarted>('POST', '/v1/videos', { json: body, ...opts }),
+    createAndWait: async (body: CreateVideo, opts: CreateAndWaitOptions = {}): Promise<Job> =>
+      this.jobs.wait((await this.videos.create(body, startOptions(opts))).id, {
+        intervalMs: 10_000,
+        timeoutMs: 20 * 60_000,
+        ...opts,
+      }),
   };
 
   /** Upload an image (or have the API fetch a public URL) to use as a source. */
@@ -200,6 +224,32 @@ export class Mnml {
         await sleep(interval, opts.signal);
       }
     },
+    /** `wait` for several jobs at once, such as every id a render with `count` started. */
+    waitAll: (ids: readonly string[], opts: WaitOptions = {}): Promise<Job[]> =>
+      Promise.all(ids.map((id) => this.jobs.wait(id, opts))),
+  };
+
+  /** A job's outputs. Their links are signed and expire, so download what you keep. */
+  readonly files = {
+    /**
+     * The file behind an output (or its `url`): its bytes and content type
+     * (`image/jpeg`, `image/png`, `image/webp` or `video/mp4`). The signature
+     * in the link is the credential, so your key is not sent with it. An
+     * expired link throws `MnmlError` with `NOT_FOUND`: read the job again for
+     * a fresh one.
+     */
+    download: async (
+      output: JobOutput | string,
+      opts: { signal?: AbortSignal } = {},
+    ): Promise<DownloadedFile> => {
+      const url = typeof output === 'string' ? output : output.url;
+      const res = await this.send(url, { method: 'GET', headers: this.baseHeaders() }, opts.signal);
+      if (!res.ok) throw errorFrom(res, await res.json().catch(() => null));
+      return {
+        data: new Uint8Array(await res.arrayBuffer()),
+        contentType: res.headers.get('content-type'),
+      };
+    },
   };
 
   /** The key's account: balance, tier and limits. */
@@ -212,17 +262,24 @@ export class Mnml {
     list: (opts?: RequestOptions) => this.request<Engines>('GET', '/v1/engines', opts),
   };
 
+  /** Headers every call carries, the key aside. */
+  private baseHeaders(): Record<string, string> {
+    const headers: Record<string, string> = {};
+    // Not in a browser: a header the API's CORS rules do not allow would fail the preflight.
+    if (typeof window === 'undefined') headers['user-agent'] = `mnml-sdk-typescript/${VERSION}`;
+    return headers;
+  }
+
   private async request<T>(
     method: 'GET' | 'POST',
     path: string,
     opts: RequestOptions & { json?: unknown; form?: FormData } = {},
   ): Promise<T> {
     const headers: Record<string, string> = {
+      ...this.baseHeaders(),
       authorization: `Bearer ${this.apiKey}`,
       accept: 'application/json',
     };
-    // Not in a browser: a header the API's CORS rules do not allow would fail the preflight.
-    if (typeof window === 'undefined') headers['user-agent'] = `mnml-sdk-typescript/${VERSION}`;
     if (method === 'POST') headers['idempotency-key'] = opts.idempotencyKey ?? newIdempotencyKey();
     let body: string | FormData | undefined;
     if (opts.json !== undefined) {
@@ -230,20 +287,31 @@ export class Mnml {
       body = JSON.stringify(opts.json);
     } else if (opts.form) body = opts.form;
 
+    const res = await this.send(
+      `${this.baseUrl}${path}`,
+      { method, headers, ...(body !== undefined ? { body } : {}) },
+      opts.signal,
+    );
+    const json = (await res.json().catch(() => null)) as Envelope<T> | null;
+    if (res.ok && json?.success) return json.data as T;
+    throw errorFrom(res, json);
+  }
+
+  /**
+   * One call with the client's retries: a 429, a 5xx or a dropped connection
+   * is sent again (the same headers, so the same idempotency key) after
+   * `Retry-After` or a backoff. The last answer is returned, whatever it is.
+   */
+  private async send(url: string, init: RequestInit, signal?: AbortSignal): Promise<Response> {
     for (let attempt = 0; ; attempt += 1) {
-      const timeout = withTimeout(this.timeoutMs, opts.signal);
+      const timeout = withTimeout(this.timeoutMs, signal);
       let res: Response;
       try {
-        res = await this.fetchImpl(`${this.baseUrl}${path}`, {
-          method,
-          headers,
-          ...(body !== undefined ? { body } : {}),
-          signal: timeout.signal,
-        });
+        res = await this.fetchImpl(url, { ...init, signal: timeout.signal });
       } catch (err) {
         timeout.done();
-        if (opts.signal?.aborted || attempt >= this.maxRetries) throw err;
-        await sleep(backoff(attempt), opts.signal);
+        if (signal?.aborted || attempt >= this.maxRetries) throw err;
+        await sleep(backoff(attempt), signal);
         continue;
       }
       timeout.done();
@@ -252,27 +320,43 @@ export class Mnml {
         const wait = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : backoff(attempt);
         if (wait <= MAX_RETRY_AFTER_MS) {
           await res.body?.cancel().catch(() => undefined);
-          await sleep(wait, opts.signal);
+          await sleep(wait, signal);
           continue;
         }
       }
-      const json = (await res.json().catch(() => null)) as
-        | { success: true; data: T }
-        | {
-            success: false;
-            error?: { code?: string; message?: string; details?: unknown; issues?: MnmlIssue[] };
-          }
-        | null;
-      if (res.ok && json && json.success) return json.data;
-      const error = json && !json.success ? json.error : undefined;
-      throw new MnmlError(
-        error?.code ?? 'HTTP_ERROR',
-        error?.message ?? `The API answered ${res.status}.`,
-        res.status,
-        res.headers.get('x-request-id'),
-        error?.details,
-        Array.isArray(error?.issues) ? error.issues : [],
-      );
+      return res;
     }
   }
+}
+
+/** The create call's own options, out of a `createAndWait`'s. */
+function startOptions(opts: CreateAndWaitOptions): RequestOptions {
+  return {
+    ...(opts.idempotencyKey !== undefined ? { idempotencyKey: opts.idempotencyKey } : {}),
+    ...(opts.signal ? { signal: opts.signal } : {}),
+  };
+}
+
+/** The API's answer envelope: `data` on a success, `error` on a refusal. */
+type Envelope<T> = {
+  success?: boolean;
+  data?: T;
+  error?: { code?: string; message?: string; details?: unknown; issues?: MnmlIssue[] };
+};
+
+/**
+ * A refusal as `MnmlError`, from the API's error envelope when the answer has
+ * one. Takes the body already read: a response's body is read once, never
+ * cloned, since a cloned body stalls under Node 18's stream timers.
+ */
+function errorFrom(res: Response, json: Envelope<unknown> | null): MnmlError {
+  const error = json && json.success === false ? json.error : undefined;
+  return new MnmlError(
+    error?.code ?? 'HTTP_ERROR',
+    error?.message ?? `The API answered ${res.status}.`,
+    res.status,
+    res.headers.get('x-request-id'),
+    error?.details,
+    Array.isArray(error?.issues) ? error.issues : [],
+  );
 }
