@@ -244,7 +244,7 @@ export class Mnml {
     ): Promise<DownloadedFile> => {
       const url = typeof output === 'string' ? output : output.url;
       const res = await this.send(url, { method: 'GET', headers: this.baseHeaders() }, opts.signal);
-      if (!res.ok) throw await errorFrom(res);
+      if (!res.ok) throw errorFrom(res, await res.json().catch(() => null));
       return {
         data: new Uint8Array(await res.arrayBuffer()),
         contentType: res.headers.get('content-type'),
@@ -292,12 +292,9 @@ export class Mnml {
       { method, headers, ...(body !== undefined ? { body } : {}) },
       opts.signal,
     );
-    const json = (await res
-      .clone()
-      .json()
-      .catch(() => null)) as { success?: boolean; data?: T } | null;
+    const json = (await res.json().catch(() => null)) as Envelope<T> | null;
     if (res.ok && json?.success) return json.data as T;
-    throw await errorFrom(res);
+    throw errorFrom(res, json);
   }
 
   /**
@@ -340,12 +337,19 @@ function startOptions(opts: CreateAndWaitOptions): RequestOptions {
   };
 }
 
-/** A refusal as `MnmlError`, from the API's error envelope when the answer has one. */
-async function errorFrom(res: Response): Promise<MnmlError> {
-  const json = (await res.json().catch(() => null)) as {
-    success?: boolean;
-    error?: { code?: string; message?: string; details?: unknown; issues?: MnmlIssue[] };
-  } | null;
+/** The API's answer envelope: `data` on a success, `error` on a refusal. */
+type Envelope<T> = {
+  success?: boolean;
+  data?: T;
+  error?: { code?: string; message?: string; details?: unknown; issues?: MnmlIssue[] };
+};
+
+/**
+ * A refusal as `MnmlError`, from the API's error envelope when the answer has
+ * one. Takes the body already read: a response's body is read once, never
+ * cloned, since a cloned body stalls under Node 18's stream timers.
+ */
+function errorFrom(res: Response, json: Envelope<unknown> | null): MnmlError {
   const error = json && json.success === false ? json.error : undefined;
   return new MnmlError(
     error?.code ?? 'HTTP_ERROR',
