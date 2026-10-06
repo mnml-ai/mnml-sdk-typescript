@@ -4,15 +4,29 @@ import { describe, expect, it } from 'vitest';
 
 import type {
   Account,
+  AccountKey,
+  AccountLimits,
+  AspectRatio,
   CreateEdit,
   CreateEnhancement,
   CreateRender,
   CreateVideo,
+  Engine,
+  EngineCapabilities,
+  EnginePrices,
+  EnhancementKind,
   Job,
   JobCanceled,
+  JobError,
+  JobOutput,
   JobStarted,
+  JobStatus,
+  Mode,
+  ReferenceMode,
   RenderStarted,
   Upload,
+  VideoModel,
+  VideoPrice,
 } from '../types.js';
 
 /*
@@ -30,7 +44,12 @@ type Operation = {
   requestBody?: { content: Record<string, { schema: Schema }> };
   responses: Record<string, { content?: Record<string, { schema: Schema }> }>;
 };
-type Schema = { properties?: Record<string, Schema> };
+type Schema = {
+  properties?: Record<string, Schema>;
+  items?: Schema;
+  enum?: string[];
+  anyOf?: Schema[];
+};
 
 // `spec/openapi.json` is the API's published document (`npm run spec:update` refreshes it).
 const spec = JSON.parse(
@@ -46,9 +65,24 @@ const dataKeys = (id: string) => {
   return Object.keys(schema.properties?.['data']?.properties ?? {}).sort();
 };
 
+/** The `data` schema of an operation's success answer. */
+const data = (id: string): Schema => {
+  const ok = Object.entries(op(id).responses).find(([code]) => code.startsWith('2'))![1];
+  return ok.content!['application/json']!.schema.properties!['data']!;
+};
+const body = (id: string): Schema => op(id).requestBody!.content['application/json']!.schema;
+/** A schema's keys, through an array and a nullable `anyOf`. */
+const keysOf = (schema: Schema): string[] => {
+  const s = schema.items ?? schema.anyOf?.find((m) => m.properties) ?? schema;
+  return Object.keys(s.properties ?? {}).sort();
+};
+const enumOf = (schema: Schema): string[] => [...(schema.enum ?? [])].sort();
+
 /** Every key across a union's members. */
 type Keys<T> = T extends unknown ? keyof T : never;
 const keys = <T>(record: Record<Keys<T>, 1>) => Object.keys(record).sort();
+/** Every member of a string union. */
+const members = <T extends string>(record: Record<T, 1>) => Object.keys(record).sort();
 
 /** The operations the client covers, by operationId. */
 const COVERED: Record<string, string> = {
@@ -164,5 +198,112 @@ describe('the SDK covers the spec', () => {
     expect(
       keys<Account>({ id: 1, email: 1, name: 1, tier: 1, credits: 1, key: 1, limits: 1 }),
     ).toEqual(dataKeys('getAccount'));
+  });
+
+  it('types the nested answers: account, engines, video models, job outputs', () => {
+    const account = data('getAccount').properties!;
+    expect(keys<AccountKey>({ id: 1, allowed_origins: 1, daily_credit_limit: 1 })).toEqual(
+      keysOf(account['key']!),
+    );
+    expect(
+      keys<AccountLimits>({
+        scope: 1,
+        requests_per_minute: 1,
+        reads_per_minute: 1,
+        concurrent_jobs: 1,
+        daily_credits: 1,
+      }),
+    ).toEqual(keysOf(account['limits']!));
+    const engines = data('listEngines').properties!;
+    const engine = engines['engines']!.items!.properties!;
+    expect(
+      keys<Engine>({
+        id: 1,
+        name: 1,
+        tier: 1,
+        default: 1,
+        paid_only: 1,
+        available: 1,
+        prices: 1,
+        capabilities: 1,
+      }),
+    ).toEqual(keysOf(engines['engines']!));
+    expect(keys<EnginePrices>({ render: 1, edit: 1 })).toEqual(keysOf(engine['prices']!));
+    expect(
+      keys<EngineCapabilities>({
+        text_to_render: 1,
+        masks: 1,
+        edit_references: 1,
+        max_references: 1,
+      }),
+    ).toEqual(keysOf(engine['capabilities']!));
+    const video = engines['video_models']!;
+    expect(keys<VideoModel>({ id: 1, name: 1, default: 1, available: 1, prices: 1 })).toEqual(
+      keysOf(video),
+    );
+    expect(keys<VideoPrice>({ duration_seconds: 1, credits: 1 })).toEqual(
+      keysOf(video.items!.properties!['prices']!),
+    );
+    const job = data('getJob').properties!;
+    expect(keys<JobOutput>({ url: 1, media: 1, expires_at: 1 })).toEqual(keysOf(job['outputs']!));
+    expect(keys<JobError>({ code: 1, message: 1 })).toEqual(keysOf(job['error']!));
+  });
+
+  it('names every value the API takes or answers with', () => {
+    const render = body('createRender').properties!;
+    expect(
+      members<Mode>({
+        exterior: 1,
+        interior: 1,
+        masterplan: 1,
+        plan: 1,
+        landscape: 1,
+        product: 1,
+        'text-to-render': 1,
+      }),
+    ).toEqual(enumOf(render['mode']!));
+    expect(
+      members<AspectRatio>({
+        auto: 1,
+        '1:1': 1,
+        '3:2': 1,
+        '4:3': 1,
+        '5:4': 1,
+        '16:9': 1,
+        '21:9': 1,
+        '2:3': 1,
+        '3:4': 1,
+        '4:5': 1,
+        '9:16': 1,
+      }),
+    ).toEqual(enumOf(render['aspect_ratio']!));
+    expect(
+      members<ReferenceMode>({
+        auto: 1,
+        style: 1,
+        material: 1,
+        atmosphere: 1,
+        color: 1,
+        geometry: 1,
+      }),
+    ).toEqual(enumOf(render['references']!.items!.properties!['mode']!));
+    expect(
+      members<EnhancementKind>({ upscale: 1, enhance: 1, 'bg-remove': 1, outpaint: 1 }),
+    ).toEqual(enumOf(body('createEnhancement').properties!['kind']!));
+    const job = data('getJob').properties!;
+    expect(
+      members<JobStatus>({ queued: 1, processing: 1, succeeded: 1, failed: 1, canceled: 1 }),
+    ).toEqual(enumOf(job['status']!));
+    expect(
+      members<JobError['code']>({ UNSAFE_CONTENT: 1, NO_CHANGE: 1, CANCELED: 1, RENDER_FAILED: 1 }),
+    ).toEqual(enumOf(job['error']!.anyOf!.find((m) => m.properties)!.properties!['code']!));
+    expect(
+      members<JobCanceled['outcome']>({
+        refunded: 1,
+        requested: 1,
+        'too-late': 1,
+        'already-settled': 1,
+      }),
+    ).toEqual(enumOf(data('cancelJob').properties!['outcome']!));
   });
 });
