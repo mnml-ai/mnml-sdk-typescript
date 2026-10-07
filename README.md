@@ -157,13 +157,16 @@ await mnml.videos.create({
 
 ### Waiting for a job
 
-A render can come back finished from the create call itself: pass `wait` (1–60 seconds) and
-the answer's `jobs` carry the outputs. `renders.createAndWait` does this for you, and polls only
-when a render is still running after that.
+A render can come back finished from the create call itself: pass `wait` (1–90 seconds) and
+the answer's `jobs` carry the outputs. A read takes `wait` too, and answers as soon as the job
+settles. `createAndWait` and `jobs.wait` use both, so a render usually takes one or two calls,
+not a polling loop.
 
 ```ts
-const started = await mnml.renders.create({ image, prompt }, { wait: 60 });
-console.log(started.jobs?.[0]?.outputs[0]?.url); // set when it finished within the minute
+const started = await mnml.renders.create({ image, prompt }, { wait: 90 });
+console.log(started.jobs?.[0]?.outputs[0]?.url); // set when it finished in time
+
+const read = await mnml.jobs.get(started.id, { wait: 90 }); // held until it settles
 
 const job = await mnml.jobs.wait(id, { intervalMs: 3000, timeoutMs: 10 * 60_000 });
 ```

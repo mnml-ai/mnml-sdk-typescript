@@ -44,15 +44,25 @@ export interface RequestOptions {
 
 export interface RenderOptions extends RequestOptions {
   /**
-   * Hold the answer up to this many seconds (1–60) while the render runs: the
+   * Hold the answer up to this many seconds (1–90) while the render runs: the
    * answer's `jobs` then carry the outputs, with no polling. Still running when
    * the time is up, they carry the jobs as they stand.
    */
   wait?: number;
 }
 
+export interface ReadOptions {
+  /** Hold the read up to this many seconds (1–90): it answers as soon as the job settles. */
+  wait?: number;
+  signal?: AbortSignal;
+}
+
 export interface WaitOptions {
-  /** Between reads, in milliseconds. Default 3 000 (use more for video). */
+  /**
+   * The least time between two reads, in milliseconds. Default 3 000. Each
+   * read is held by the API until the job settles (up to 90 s), so this only
+   * spaces reads the API answered early.
+   */
   intervalMs?: number;
   /** Give up after this long, in milliseconds. Default 10 minutes. */
   timeoutMs?: number;
@@ -75,8 +85,8 @@ const RETRYABLE = new Set([429, 500, 502, 503, 504]);
 /** A longer `Retry-After` (a daily limit runs to midnight UTC) is the caller's to handle. */
 const MAX_RETRY_AFTER_MS = 60_000;
 const TERMINAL = new Set(['succeeded', 'failed', 'canceled']);
-/** How long `createAndWait` asks the API to hold a render's answer. */
-const CREATE_AND_WAIT_SECONDS = 50;
+/** The longest the API holds an answer (`?wait`): under Cloudflare's 100-second limit. */
+const MAX_WAIT_SECONDS = 90;
 
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise<void>((resolve, reject) => {
@@ -192,7 +202,7 @@ export class Mnml {
     createAndWait: async (body: CreateRender, opts: CreateAndWaitOptions = {}): Promise<Job[]> => {
       const started = await this.renders.create(body, {
         ...startOptions(opts),
-        wait: CREATE_AND_WAIT_SECONDS,
+        wait: MAX_WAIT_SECONDS,
       });
       const jobs = started.jobs ?? [];
       if (jobs.length === started.ids.length && jobs.every((j) => TERMINAL.has(j.status))) {
@@ -251,20 +261,38 @@ export class Mnml {
   };
 
   readonly jobs = {
-    get: (id: string, opts?: RequestOptions) =>
-      this.request<Job>('GET', `/v1/jobs/${encodeURIComponent(id)}`, opts),
+    get: (id: string, opts: ReadOptions = {}) => {
+      const { wait, signal } = opts;
+      const path = `/v1/jobs/${encodeURIComponent(id)}`;
+      return this.request<Job>('GET', wait ? `${path}?wait=${wait}` : path, {
+        ...(signal ? { signal } : {}),
+        // A held answer must not trip the client's own timeout.
+        ...(wait ? { timeoutMs: this.timeoutMs + wait * 1000 } : {}),
+      });
+    },
     /** Cancels a job; one cancelled before it produced anything is refunded. */
     cancel: (id: string, opts?: RequestOptions) =>
       this.request<JobCanceled>('POST', `/v1/jobs/${encodeURIComponent(id)}/cancel`, opts),
-    /** Reads the job until it succeeds, fails or is cancelled, and returns it. */
+    /**
+     * Reads the job until it succeeds, fails or is cancelled, and returns it.
+     * Each read asks the API to hold it until the job settles, so a render
+     * usually takes one read, not a loop of quick polls.
+     */
     wait: async (id: string, opts: WaitOptions = {}): Promise<Job> => {
       const interval = opts.intervalMs ?? 3000;
       const deadline = Date.now() + (opts.timeoutMs ?? 10 * 60_000);
       for (;;) {
-        const job = await this.jobs.get(id, opts.signal ? { signal: opts.signal } : undefined);
+        const left = Math.floor((deadline - Date.now()) / 1000);
+        const began = Date.now();
+        const job = await this.jobs.get(id, {
+          ...(left >= 1 ? { wait: Math.min(MAX_WAIT_SECONDS, left) } : {}),
+          ...(opts.signal ? { signal: opts.signal } : {}),
+        });
         if (TERMINAL.has(job.status)) return job;
         if (Date.now() + interval > deadline) throw new MnmlTimeoutError(id);
-        await sleep(interval, opts.signal);
+        // Answered early, still running: space the next read.
+        const pause = interval - (Date.now() - began);
+        if (pause > 0) await sleep(pause, opts.signal);
       }
     },
     /** `wait` for several jobs at once, such as every id a render with `count` started. */

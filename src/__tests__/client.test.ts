@@ -198,7 +198,7 @@ describe('Mnml', () => {
     expect(f.calls).toHaveLength(2);
   });
 
-  it('waits for a job to settle', async () => {
+  it('waits for a job to settle, asking the API to hold each read', async () => {
     vi.useFakeTimers();
     const job = (status: string) => ok({ id: '9', status, outputs: [] });
     const f = fakeFetch([job('queued'), job('processing'), job('succeeded')]);
@@ -206,7 +206,22 @@ describe('Mnml', () => {
     const p = mnml.jobs.wait('9', { intervalMs: 1000 });
     await vi.advanceTimersByTimeAsync(2000);
     await expect(p).resolves.toMatchObject({ status: 'succeeded' });
-    expect(f.calls.every((c) => c.url.endsWith('/v1/jobs/9'))).toBe(true);
+    expect(f.calls.map((c) => c.url)).toEqual(
+      Array(3).fill('https://api.mnml.ai/v1/jobs/9?wait=90'),
+    );
+  });
+
+  it('asks for no longer than the wait has left, and reads plainly at the end', async () => {
+    const f = fakeFetch([
+      ok({ id: '9', status: 'processing', outputs: [] }),
+      ok({ id: '9', status: 'succeeded', outputs: [] }),
+      ok({ id: '9', status: 'succeeded', outputs: [] }),
+    ]);
+    const mnml = new Mnml({ apiKey: 'k', fetch: f.impl });
+    await mnml.jobs.wait('9', { intervalMs: 0, timeoutMs: 30_500 });
+    expect(f.calls[0]!.url).toBe('https://api.mnml.ai/v1/jobs/9?wait=30');
+    await mnml.jobs.get('9');
+    expect(f.calls[2]!.url).toBe('https://api.mnml.ai/v1/jobs/9');
   });
 
   it('stops waiting at the deadline, leaving the job running', async () => {
@@ -296,7 +311,7 @@ describe('Mnml', () => {
     const jobs = await mnml.renders.createAndWait({ prompt: 'x' });
     expect(jobs).toEqual([done]);
     expect(f.calls).toHaveLength(1);
-    expect(f.calls[0]!.url).toBe('https://api.mnml.ai/v1/renders?wait=50');
+    expect(f.calls[0]!.url).toBe('https://api.mnml.ai/v1/renders?wait=90');
     await mnml.renders.create({ prompt: 'x' }, { wait: 30 });
     expect(f.calls[1]!.url).toBe('https://api.mnml.ai/v1/renders?wait=30');
   });
@@ -311,7 +326,7 @@ describe('Mnml', () => {
       prompt: 'Dark brick',
     });
     expect(job).toMatchObject({ id: '5', status: 'failed' });
-    expect(f.calls[1]!.url).toBe('https://api.mnml.ai/v1/jobs/5');
+    expect(f.calls[1]!.url).toBe('https://api.mnml.ai/v1/jobs/5?wait=90');
   });
 
   it('downloads an output without sending the key', async () => {

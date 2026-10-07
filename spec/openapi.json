@@ -634,11 +634,11 @@
             "name": "wait",
             "in": "query",
             "required": false,
-            "description": "Hold the answer up to this many seconds (1 to 60) while the render runs, and answer with the finished jobs in `jobs`: no polling. Still running when the time is up: a 202, poll on.",
+            "description": "Hold the answer up to this many seconds (1 to 90) while the render runs, and answer with the finished jobs in `jobs`. Still running when the time is up: a 202; read the job with GET /v1/jobs/{id}?wait=90 until it settles.",
             "schema": {
               "type": "integer",
               "minimum": 0,
-              "maximum": 60
+              "maximum": 90
             }
           },
           {
@@ -2490,6 +2490,17 @@
             "schema": {
               "type": "string",
               "pattern": "^\\d{1,18}$"
+            }
+          },
+          {
+            "name": "wait",
+            "in": "query",
+            "required": false,
+            "description": "Hold the answer up to this many seconds (1 to 90) until the job settles; it answers as soon as it does. Call again while status is queued or processing.",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 90
             }
           }
         ],
