@@ -63,13 +63,9 @@ export type VideoMotion = 'subtle' | 'balanced' | 'dynamic' | 'auto';
  */
 export type ImageInput = string | Uint8Array | ArrayBuffer | Blob;
 
-/**
- * Where an image comes from: the image itself, one of your uploads (to send
- * one image once for several calls), or a finished job.
- */
+/** Where an image comes from: the image itself, or a finished job. */
 export type Source =
   | { image: ImageInput }
-  | { upload_id: string }
   | { job_id: string }
   /** @deprecated The same as `image`, under its first name. */
   | { image_url: string };
@@ -115,8 +111,6 @@ export type CreateEdit = Common &
     region?: Region;
     /** A PNG the size of the image, white where to change, black where to keep. */
     mask?: ImageInput;
-    /** The same mask, uploaded once with `purpose: 'mask'` to use in several calls. */
-    mask_upload_id?: string;
   };
 
 export type EnhancementKind = 'upscale' | 'enhance' | 'bg-remove' | 'outpaint';
@@ -194,19 +188,20 @@ export interface Job {
   completed_at: string | null;
 }
 
+/**
+ * One event of `jobs.stream`: the job as it stands (`job`), then exactly one
+ * last event, after which the stream ends: `done` (the job settled),
+ * `timeout` (still running after ten minutes: open the stream again) or
+ * `error` (the API could not read the job; it still runs).
+ */
+export type JobStreamEvent =
+  | { type: 'job' | 'done' | 'timeout'; job: Job }
+  | { type: 'error'; error: { code: string; message: string } };
+
 export interface JobCanceled {
   id: string;
   outcome: 'refunded' | 'requested' | 'too-late' | 'already-settled';
   credits_refunded: number;
-}
-
-export interface Upload {
-  id: string;
-  width: number | null;
-  height: number | null;
-  size_bytes: number;
-  purpose: 'image' | 'mask';
-  created_at: string;
 }
 
 export interface AccountCredits {

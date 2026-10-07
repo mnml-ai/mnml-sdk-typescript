@@ -30,9 +30,6 @@
       "name": "Engines"
     },
     {
-      "name": "Uploads"
-    },
-    {
       "name": "Renders"
     },
     {
@@ -52,7 +49,7 @@
     }
   ],
   "paths": {
-    "/v1/openapi.json": {
+    "/v2/openapi.json": {
       "get": {
         "operationId": "getOpenApi",
         "summary": "This API description, as OpenAPI 3.1.",
@@ -86,7 +83,7 @@
         }
       }
     },
-    "/v1/account": {
+    "/v2/account": {
       "get": {
         "operationId": "getAccount",
         "summary": "The key's account: balance, tier, this key's settings and the limits in force.",
@@ -263,7 +260,7 @@
         }
       }
     },
-    "/v1/engines": {
+    "/v2/engines": {
       "get": {
         "operationId": "listEngines",
         "summary": "The engines this key can render on, with their credit prices.",
@@ -466,163 +463,7 @@
         }
       }
     },
-    "/v1/uploads": {
-      "post": {
-        "operationId": "createUpload",
-        "summary": "Optional: upload an image once to use in several calls (every call also takes its image inline). A multipart \"file\", or JSON { url } that we fetch. It is kept 24 hours, then deleted, and never appears in your mnml library. The same image twice is the same upload.",
-        "tags": [
-          "Uploads"
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "multipart/form-data": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "file": {
-                    "type": "string",
-                    "format": "binary"
-                  },
-                  "purpose": {
-                    "type": "string",
-                    "enum": [
-                      "image",
-                      "mask"
-                    ]
-                  }
-                },
-                "required": [
-                  "file"
-                ]
-              }
-            },
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "url": {
-                    "type": "string",
-                    "format": "uri"
-                  },
-                  "purpose": {
-                    "type": "string",
-                    "enum": [
-                      "image",
-                      "mask"
-                    ]
-                  }
-                },
-                "required": [
-                  "url"
-                ]
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "The upload. Pass its id as upload_id.",
-            "headers": {
-              "X-Request-Id": {
-                "$ref": "#/components/headers/RequestId"
-              },
-              "RateLimit-Limit": {
-                "$ref": "#/components/headers/RateLimitLimit"
-              },
-              "RateLimit-Remaining": {
-                "$ref": "#/components/headers/RateLimitRemaining"
-              },
-              "RateLimit-Reset": {
-                "$ref": "#/components/headers/RateLimitReset"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": {
-                      "type": "boolean",
-                      "const": true
-                    },
-                    "data": {
-                      "type": "object",
-                      "properties": {
-                        "id": {
-                          "type": "string"
-                        },
-                        "width": {
-                          "anyOf": [
-                            {
-                              "type": "integer",
-                              "minimum": -9007199254740991,
-                              "maximum": 9007199254740991
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        },
-                        "height": {
-                          "anyOf": [
-                            {
-                              "type": "integer",
-                              "minimum": -9007199254740991,
-                              "maximum": 9007199254740991
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        },
-                        "size_bytes": {
-                          "type": "integer",
-                          "minimum": -9007199254740991,
-                          "maximum": 9007199254740991
-                        },
-                        "purpose": {
-                          "type": "string",
-                          "enum": [
-                            "image",
-                            "mask"
-                          ]
-                        },
-                        "created_at": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "id",
-                        "width",
-                        "height",
-                        "size_bytes",
-                        "purpose",
-                        "created_at"
-                      ]
-                    }
-                  },
-                  "required": [
-                    "success",
-                    "data"
-                  ]
-                }
-              }
-            }
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthenticated"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        }
-      }
-    },
-    "/v1/renders": {
+    "/v2/renders": {
       "post": {
         "operationId": "createRender",
         "summary": "Start a render. Send the image in the same call: a link, base64, or the file itself as multipart form data. Charged at the engine price when it starts; a failed render is refunded.",
@@ -634,7 +475,7 @@
             "name": "wait",
             "in": "query",
             "required": false,
-            "description": "Hold the answer up to this many seconds (1 to 90) while the render runs, and answer with the finished jobs in `jobs`. Still running when the time is up: a 202; read the job with GET /v1/jobs/{id}?wait=90 until it settles.",
+            "description": "Hold the answer up to this many seconds (1 to 90) while the render runs, and answer with the finished jobs in `jobs`. Still running when the time is up: a 202; read the job with GET /v2/jobs/{id}?wait=90 until it settles.",
             "schema": {
               "type": "integer",
               "minimum": 0,
@@ -684,12 +525,6 @@
                     "type": "string",
                     "minLength": 1
                   },
-                  "upload_id": {
-                    "description": "An image from POST /v1/uploads, to reuse one image.",
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                  },
                   "job_id": {
                     "description": "A finished job of yours: work on its output without downloading it.",
                     "type": "string",
@@ -717,12 +552,6 @@
                               "description": "Same as image.",
                               "type": "string",
                               "minLength": 1
-                            },
-                            "upload_id": {
-                              "description": "An image from POST /v1/uploads, to reuse one image.",
-                              "type": "string",
-                              "format": "uuid",
-                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                             },
                             "job_id": {
                               "description": "A finished job of yours: work on its output without downloading it.",
@@ -849,12 +678,6 @@
                     ],
                     "deprecated": true
                   },
-                  "upload_id": {
-                    "description": "An image from POST /v1/uploads, to reuse one image.",
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                  },
                   "job_id": {
                     "description": "A finished job of yours: work on its output without downloading it.",
                     "type": "string",
@@ -888,12 +711,6 @@
                                   "description": "Same as image.",
                                   "type": "string",
                                   "minLength": 1
-                                },
-                                "upload_id": {
-                                  "description": "An image from POST /v1/uploads, to reuse one image.",
-                                  "type": "string",
-                                  "format": "uuid",
-                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                                 },
                                 "job_id": {
                                   "description": "A finished job of yours: work on its output without downloading it.",
@@ -1164,7 +981,7 @@
             }
           },
           "202": {
-            "description": "Started. Poll GET /v1/jobs/{id} for the result.",
+            "description": "Started. Poll GET /v2/jobs/{id} for the result.",
             "headers": {
               "X-Request-Id": {
                 "$ref": "#/components/headers/RequestId"
@@ -1372,7 +1189,7 @@
         }
       }
     },
-    "/v1/edits": {
+    "/v2/edits": {
       "post": {
         "operationId": "createEdit",
         "summary": "Change one thing on an image and keep the rest, on the whole image or an area; or erase what an area covers. Charged when it starts; refunded if it fails.",
@@ -1413,12 +1230,6 @@
                     "description": "Same as image.",
                     "type": "string",
                     "minLength": 1
-                  },
-                  "upload_id": {
-                    "description": "An image from POST /v1/uploads, to reuse one image.",
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   },
                   "job_id": {
                     "description": "A finished job of yours: work on its output without downloading it.",
@@ -1463,12 +1274,6 @@
                               "description": "Same as image.",
                               "type": "string",
                               "minLength": 1
-                            },
-                            "upload_id": {
-                              "description": "An image from POST /v1/uploads, to reuse one image.",
-                              "type": "string",
-                              "format": "uuid",
-                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                             },
                             "job_id": {
                               "description": "A finished job of yours: work on its output without downloading it.",
@@ -1558,11 +1363,6 @@
                     "type": "string",
                     "minLength": 1
                   },
-                  "mask_upload_id": {
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                  },
                   "webhook_url": {
                     "description": "A public https:// URL to send this job’s settle event to, signed like every webhook.",
                     "type": "string",
@@ -1617,12 +1417,6 @@
                     ],
                     "deprecated": true
                   },
-                  "upload_id": {
-                    "description": "An image from POST /v1/uploads, to reuse one image.",
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                  },
                   "job_id": {
                     "description": "A finished job of yours: work on its output without downloading it.",
                     "type": "string",
@@ -1672,12 +1466,6 @@
                                   "description": "Same as image.",
                                   "type": "string",
                                   "minLength": 1
-                                },
-                                "upload_id": {
-                                  "description": "An image from POST /v1/uploads, to reuse one image.",
-                                  "type": "string",
-                                  "format": "uuid",
-                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                                 },
                                 "job_id": {
                                   "description": "A finished job of yours: work on its output without downloading it.",
@@ -1777,11 +1565,6 @@
                       }
                     ]
                   },
-                  "mask_upload_id": {
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                  },
                   "webhook_url": {
                     "description": "A public https:// URL to send this job’s settle event to, signed like every webhook.",
                     "type": "string",
@@ -1796,7 +1579,7 @@
         },
         "responses": {
           "202": {
-            "description": "Started. Poll GET /v1/jobs/{id} for the result.",
+            "description": "Started. Poll GET /v2/jobs/{id} for the result.",
             "headers": {
               "X-Request-Id": {
                 "$ref": "#/components/headers/RequestId"
@@ -1882,7 +1665,7 @@
         }
       }
     },
-    "/v1/enhancements": {
+    "/v2/enhancements": {
       "post": {
         "operationId": "createEnhancement",
         "summary": "Upscale, enhance, cut out (bg-remove) or extend (outpaint) an image. Upscale, enhance and outpaint need an account that has paid.",
@@ -1920,12 +1703,6 @@
                     "description": "Same as image.",
                     "type": "string",
                     "minLength": 1
-                  },
-                  "upload_id": {
-                    "description": "An image from POST /v1/uploads, to reuse one image.",
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   },
                   "job_id": {
                     "description": "A finished job of yours: work on its output without downloading it.",
@@ -2011,12 +1788,6 @@
                     ],
                     "deprecated": true
                   },
-                  "upload_id": {
-                    "description": "An image from POST /v1/uploads, to reuse one image.",
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                  },
                   "job_id": {
                     "description": "A finished job of yours: work on its output without downloading it.",
                     "type": "string",
@@ -2064,7 +1835,7 @@
         },
         "responses": {
           "202": {
-            "description": "Started. Poll GET /v1/jobs/{id} for the result.",
+            "description": "Started. Poll GET /v2/jobs/{id} for the result.",
             "headers": {
               "X-Request-Id": {
                 "$ref": "#/components/headers/RequestId"
@@ -2150,7 +1921,7 @@
         }
       }
     },
-    "/v1/videos": {
+    "/v2/videos": {
       "post": {
         "operationId": "createVideo",
         "summary": "Animate an image into a short clip: a camera move through or around it. Priced by model and length; accounts that have paid only.",
@@ -2179,12 +1950,6 @@
                     "description": "Same as image.",
                     "type": "string",
                     "minLength": 1
-                  },
-                  "upload_id": {
-                    "description": "An image from POST /v1/uploads, to reuse one image.",
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   },
                   "job_id": {
                     "description": "A finished job of yours: work on its output without downloading it.",
@@ -2232,12 +1997,6 @@
                             "description": "Same as image.",
                             "type": "string",
                             "minLength": 1
-                          },
-                          "upload_id": {
-                            "description": "An image from POST /v1/uploads, to reuse one image.",
-                            "type": "string",
-                            "format": "uuid",
-                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                           },
                           "job_id": {
                             "description": "A finished job of yours: work on its output without downloading it.",
@@ -2294,12 +2053,6 @@
                     ],
                     "deprecated": true
                   },
-                  "upload_id": {
-                    "description": "An image from POST /v1/uploads, to reuse one image.",
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                  },
                   "job_id": {
                     "description": "A finished job of yours: work on its output without downloading it.",
                     "type": "string",
@@ -2353,12 +2106,6 @@
                                 "type": "string",
                                 "minLength": 1
                               },
-                              "upload_id": {
-                                "description": "An image from POST /v1/uploads, to reuse one image.",
-                                "type": "string",
-                                "format": "uuid",
-                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                              },
                               "job_id": {
                                 "description": "A finished job of yours: work on its output without downloading it.",
                                 "type": "string",
@@ -2388,7 +2135,7 @@
         },
         "responses": {
           "202": {
-            "description": "Started. A clip takes minutes; poll GET /v1/jobs/{id} for it.",
+            "description": "Started. A clip takes minutes; poll GET /v2/jobs/{id} for it.",
             "headers": {
               "X-Request-Id": {
                 "$ref": "#/components/headers/RequestId"
@@ -2474,7 +2221,7 @@
         }
       }
     },
-    "/v1/jobs/{id}": {
+    "/v2/jobs/{id}": {
       "get": {
         "operationId": "getJob",
         "summary": "Read a job: its status, its outputs as signed links that expire, what it was charged and refunded, and why it failed. A job and its outputs are kept 7 days.",
@@ -2663,7 +2410,63 @@
         }
       }
     },
-    "/v1/jobs/{id}/cancel": {
+    "/v2/jobs/{id}/events": {
+      "get": {
+        "operationId": "streamJob",
+        "summary": "Follow a job as Server-Sent Events, for one that outlasts ?wait: a job event with the job as it stands and each time it changes, then one last event (done with the settled job, timeout after 10 minutes, or error) and the stream closes. Every event's data is JSON; done's and job's are the job as GET /v2/jobs/{id} reads it.",
+        "tags": [
+          "Jobs"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The job id a create call answered with.",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{1,18}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The stream: `event: job`, then one of `event: done`, `event: timeout` or `event: error`. A `: ping` comment keeps it alive while nothing changes.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit-Limit": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "RateLimit-Remaining": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "RateLimit-Reset": {
+                "$ref": "#/components/headers/RateLimitReset"
+              }
+            },
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v2/jobs/{id}/cancel": {
       "post": {
         "operationId": "cancelJob",
         "summary": "Stop a queued or running job. Refunded at once if it had not started; otherwise refunded if nothing is delivered.",
@@ -2756,10 +2559,10 @@
         }
       }
     },
-    "/v1/files/{id}": {
+    "/v2/files/{id}": {
       "get": {
         "operationId": "getJobFile",
-        "summary": "A job's output, at the signed link GET /v1/jobs/{id} gave. No key: the signature is the credential, until it expires.",
+        "summary": "A job's output, at the signed link GET /v2/jobs/{id} gave. No key: the signature is the credential, until it expires.",
         "tags": [
           "Jobs"
         ],
@@ -2838,14 +2641,132 @@
     "/v1/archDiffusion-v46": {
       "post": {
         "operationId": "legacyV1ArchDiffusionV46",
-        "summary": "Legacy alias of /v1/renders. The same engine. `prompt_mode=edit` runs as an edit.",
+        "summary": "Legacy alias of /v2/renders. The same engine. `prompt_mode=edit` runs as an edit.",
         "deprecated": true,
         "x-mnml-legacy": {
           "kind": "render",
-          "successor": "/v1/renders",
+          "successor": "/v2/renders",
           "legacyCredits": "3",
           "paidOnly": false,
           "note": "The same engine. `prompt_mode=edit` runs as an edit.",
+          "idKey": "id",
+          "fields": [
+            {
+              "name": "image",
+              "type": "file",
+              "required": true,
+              "desc": "The source image: JPEG, PNG or WebP."
+            },
+            {
+              "name": "prompt",
+              "type": "string",
+              "required": false,
+              "desc": "What to render. Each mode has a default when it is left out."
+            },
+            {
+              "name": "expert_name",
+              "type": "string",
+              "required": false,
+              "desc": "The mode. Default `exterior`; a value outside the list is refused. `imageType` is read the same way.",
+              "values": [
+                "exterior",
+                "interior",
+                "masterplan",
+                "plan",
+                "landscape",
+                "product"
+              ]
+            },
+            {
+              "name": "prompt_mode",
+              "type": "string",
+              "required": false,
+              "desc": "`edit` changes the image as the prompt says instead of rendering it anew; it needs a `prompt`.",
+              "values": [
+                "edit"
+              ]
+            },
+            {
+              "name": "aspect_ratio",
+              "type": "string",
+              "required": false,
+              "desc": "The output shape. `square`, `vertical`, `horizontal` and `match_input_image` are read too; a value outside the list is refused.",
+              "values": [
+                "auto",
+                "1:1",
+                "3:2",
+                "4:3",
+                "5:4",
+                "16:9",
+                "21:9",
+                "2:3",
+                "3:4",
+                "4:5",
+                "9:16"
+              ]
+            },
+            {
+              "name": "seed",
+              "type": "integer",
+              "required": false,
+              "desc": "A whole number, 0 or more, to repeat a result."
+            },
+            {
+              "name": "reference_image_1",
+              "type": "file",
+              "required": false,
+              "desc": "Up to four reference images, `reference_image_1` to `reference_image_4`."
+            },
+            {
+              "name": "reference_mode_1",
+              "type": "string",
+              "required": false,
+              "desc": "What each reference steers, `reference_mode_1` to `reference_mode_4`. `composition` and `inspiration` are read too. Default `auto`.",
+              "values": [
+                "auto",
+                "style",
+                "material",
+                "atmosphere",
+                "color",
+                "geometry"
+              ]
+            },
+            {
+              "name": "reference_image",
+              "type": "file",
+              "required": false,
+              "desc": "One style reference, as the style-transfer route takes it."
+            },
+            {
+              "name": "<setting>",
+              "type": "string",
+              "required": false,
+              "desc": "Any setting of the engine's panel, by its snake_case name (`render_style`, `time_of_day`, `camera_angle`, …), matched to a value or label. A value outside the panel is refused."
+            }
+          ],
+          "answers": [
+            {
+              "status": 200,
+              "label": "Started: poll `GET /v1/status/{id}` with the id",
+              "body": {
+                "status": "success",
+                "id": "218831",
+                "prompt": "Modern building exterior",
+                "expert_name": "exterior",
+                "cost": 30,
+                "credits": 4970
+              }
+            },
+            {
+              "status": 400,
+              "label": "Refused: nothing was charged",
+              "body": {
+                "status": "error",
+                "code": "NO_CREDITS",
+                "message": "Not enough credits for this generation."
+              }
+            }
+          ],
           "engine": "v4.6-ultra"
         },
         "tags": [
@@ -2914,14 +2835,132 @@
     "/v1/archDiffusion-v45": {
       "post": {
         "operationId": "legacyV1ArchDiffusionV45",
-        "summary": "Legacy alias of /v1/renders. The same engine.",
+        "summary": "Legacy alias of /v2/renders. The same engine.",
         "deprecated": true,
         "x-mnml-legacy": {
           "kind": "render",
-          "successor": "/v1/renders",
+          "successor": "/v2/renders",
           "legacyCredits": "3",
           "paidOnly": false,
           "note": "The same engine.",
+          "idKey": "id",
+          "fields": [
+            {
+              "name": "image",
+              "type": "file",
+              "required": true,
+              "desc": "The source image: JPEG, PNG or WebP."
+            },
+            {
+              "name": "prompt",
+              "type": "string",
+              "required": false,
+              "desc": "What to render. Each mode has a default when it is left out."
+            },
+            {
+              "name": "expert_name",
+              "type": "string",
+              "required": false,
+              "desc": "The mode. Default `exterior`, which an unknown value also falls back to. `imageType` is read the same way.",
+              "values": [
+                "exterior",
+                "interior",
+                "masterplan",
+                "plan",
+                "landscape",
+                "product"
+              ]
+            },
+            {
+              "name": "prompt_mode",
+              "type": "string",
+              "required": false,
+              "desc": "`edit` changes the image as the prompt says instead of rendering it anew; it needs a `prompt`.",
+              "values": [
+                "edit"
+              ]
+            },
+            {
+              "name": "aspect_ratio",
+              "type": "string",
+              "required": false,
+              "desc": "The output shape. `square`, `vertical`, `horizontal` and `match_input_image` are read too; a value this engine cannot make is listed under `parameters.ignored`.",
+              "values": [
+                "auto",
+                "1:1",
+                "3:2",
+                "4:3",
+                "5:4",
+                "16:9",
+                "21:9",
+                "2:3",
+                "3:4",
+                "4:5",
+                "9:16"
+              ]
+            },
+            {
+              "name": "seed",
+              "type": "integer",
+              "required": false,
+              "desc": "A whole number, 0 or more, to repeat a result."
+            },
+            {
+              "name": "reference_image_1",
+              "type": "file",
+              "required": false,
+              "desc": "Up to four reference images, `reference_image_1` to `reference_image_4`."
+            },
+            {
+              "name": "reference_mode_1",
+              "type": "string",
+              "required": false,
+              "desc": "What each reference steers, `reference_mode_1` to `reference_mode_4`. `composition` and `inspiration` are read too. Default `auto`.",
+              "values": [
+                "auto",
+                "style",
+                "material",
+                "atmosphere",
+                "color",
+                "geometry"
+              ]
+            },
+            {
+              "name": "reference_image",
+              "type": "file",
+              "required": false,
+              "desc": "One style reference, as the style-transfer route takes it."
+            },
+            {
+              "name": "<setting>",
+              "type": "string",
+              "required": false,
+              "desc": "Any setting of the engine's panel, by its snake_case name (`render_style`, `camera_angle`, …), matched to a value or label. A field or value the engine has no use for is listed under `parameters.ignored`."
+            }
+          ],
+          "answers": [
+            {
+              "status": 200,
+              "label": "Started: poll `GET /v1/status/{id}` with the id",
+              "body": {
+                "status": "success",
+                "id": "218831",
+                "prompt": "Modern building exterior",
+                "expert_name": "exterior",
+                "cost": 30,
+                "credits": 4970
+              }
+            },
+            {
+              "status": 400,
+              "label": "Refused: nothing was charged",
+              "body": {
+                "status": "error",
+                "code": "NO_CREDITS",
+                "message": "Not enough credits for this generation."
+              }
+            }
+          ],
           "engine": "v4.5-ultra"
         },
         "tags": [
@@ -2990,14 +3029,132 @@
     "/v1/archDiffusion-v45-lite": {
       "post": {
         "operationId": "legacyV1ArchDiffusionV45Lite",
-        "summary": "Legacy alias of /v1/renders. The same engine. Needs an account that has paid.",
+        "summary": "Legacy alias of /v2/renders. The same engine. Needs an account that has paid: a top-up, or a balance moved from mnmlai.dev.",
         "deprecated": true,
         "x-mnml-legacy": {
           "kind": "render",
-          "successor": "/v1/renders",
+          "successor": "/v2/renders",
           "legacyCredits": "1",
           "paidOnly": true,
           "note": "The same engine.",
+          "idKey": "id",
+          "fields": [
+            {
+              "name": "image",
+              "type": "file",
+              "required": true,
+              "desc": "The source image: JPEG, PNG or WebP."
+            },
+            {
+              "name": "prompt",
+              "type": "string",
+              "required": false,
+              "desc": "What to render. Each mode has a default when it is left out."
+            },
+            {
+              "name": "expert_name",
+              "type": "string",
+              "required": false,
+              "desc": "The mode. Default `exterior`, which an unknown value also falls back to. `imageType` is read the same way.",
+              "values": [
+                "exterior",
+                "interior",
+                "masterplan",
+                "plan",
+                "landscape",
+                "product"
+              ]
+            },
+            {
+              "name": "prompt_mode",
+              "type": "string",
+              "required": false,
+              "desc": "`edit` changes the image as the prompt says instead of rendering it anew; it needs a `prompt`.",
+              "values": [
+                "edit"
+              ]
+            },
+            {
+              "name": "aspect_ratio",
+              "type": "string",
+              "required": false,
+              "desc": "The output shape. `square`, `vertical`, `horizontal` and `match_input_image` are read too; a value this engine cannot make is listed under `parameters.ignored`.",
+              "values": [
+                "auto",
+                "1:1",
+                "3:2",
+                "4:3",
+                "5:4",
+                "16:9",
+                "21:9",
+                "2:3",
+                "3:4",
+                "4:5",
+                "9:16"
+              ]
+            },
+            {
+              "name": "seed",
+              "type": "integer",
+              "required": false,
+              "desc": "A whole number, 0 or more, to repeat a result."
+            },
+            {
+              "name": "reference_image_1",
+              "type": "file",
+              "required": false,
+              "desc": "Up to four reference images, `reference_image_1` to `reference_image_4`."
+            },
+            {
+              "name": "reference_mode_1",
+              "type": "string",
+              "required": false,
+              "desc": "What each reference steers, `reference_mode_1` to `reference_mode_4`. `composition` and `inspiration` are read too. Default `auto`.",
+              "values": [
+                "auto",
+                "style",
+                "material",
+                "atmosphere",
+                "color",
+                "geometry"
+              ]
+            },
+            {
+              "name": "reference_image",
+              "type": "file",
+              "required": false,
+              "desc": "One style reference, as the style-transfer route takes it."
+            },
+            {
+              "name": "<setting>",
+              "type": "string",
+              "required": false,
+              "desc": "Any setting of the engine's panel, by its snake_case name (`render_style`, `camera_angle`, …), matched to a value or label. A field or value the engine has no use for is listed under `parameters.ignored`."
+            }
+          ],
+          "answers": [
+            {
+              "status": 200,
+              "label": "Started: poll `GET /v1/status/{id}` with the id",
+              "body": {
+                "status": "success",
+                "id": "218831",
+                "prompt": "Modern building exterior",
+                "expert_name": "exterior",
+                "cost": 30,
+                "credits": 4970
+              }
+            },
+            {
+              "status": 400,
+              "label": "Refused: nothing was charged",
+              "body": {
+                "status": "error",
+                "code": "NO_CREDITS",
+                "message": "Not enough credits for this generation."
+              }
+            }
+          ],
           "engine": "v4.5-fast"
         },
         "tags": [
@@ -3066,14 +3223,132 @@
     "/v1/archDiffusion-v44": {
       "post": {
         "operationId": "legacyV1ArchDiffusionV44",
-        "summary": "Legacy alias of /v1/renders. The same engine. Needs an account that has paid.",
+        "summary": "Legacy alias of /v2/renders. The same engine. Needs an account that has paid: a top-up, or a balance moved from mnmlai.dev.",
         "deprecated": true,
         "x-mnml-legacy": {
           "kind": "render",
-          "successor": "/v1/renders",
+          "successor": "/v2/renders",
           "legacyCredits": "3",
           "paidOnly": true,
           "note": "The same engine.",
+          "idKey": "id",
+          "fields": [
+            {
+              "name": "image",
+              "type": "file",
+              "required": true,
+              "desc": "The source image: JPEG, PNG or WebP."
+            },
+            {
+              "name": "prompt",
+              "type": "string",
+              "required": false,
+              "desc": "What to render. Each mode has a default when it is left out."
+            },
+            {
+              "name": "expert_name",
+              "type": "string",
+              "required": false,
+              "desc": "The mode. Default `exterior`, which an unknown value also falls back to. `imageType` is read the same way.",
+              "values": [
+                "exterior",
+                "interior",
+                "masterplan",
+                "plan",
+                "landscape",
+                "product"
+              ]
+            },
+            {
+              "name": "prompt_mode",
+              "type": "string",
+              "required": false,
+              "desc": "`edit` changes the image as the prompt says instead of rendering it anew; it needs a `prompt`.",
+              "values": [
+                "edit"
+              ]
+            },
+            {
+              "name": "aspect_ratio",
+              "type": "string",
+              "required": false,
+              "desc": "The output shape. `square`, `vertical`, `horizontal` and `match_input_image` are read too; a value this engine cannot make is listed under `parameters.ignored`.",
+              "values": [
+                "auto",
+                "1:1",
+                "3:2",
+                "4:3",
+                "5:4",
+                "16:9",
+                "21:9",
+                "2:3",
+                "3:4",
+                "4:5",
+                "9:16"
+              ]
+            },
+            {
+              "name": "seed",
+              "type": "integer",
+              "required": false,
+              "desc": "A whole number, 0 or more, to repeat a result."
+            },
+            {
+              "name": "reference_image_1",
+              "type": "file",
+              "required": false,
+              "desc": "Up to four reference images, `reference_image_1` to `reference_image_4`."
+            },
+            {
+              "name": "reference_mode_1",
+              "type": "string",
+              "required": false,
+              "desc": "What each reference steers, `reference_mode_1` to `reference_mode_4`. `composition` and `inspiration` are read too. Default `auto`.",
+              "values": [
+                "auto",
+                "style",
+                "material",
+                "atmosphere",
+                "color",
+                "geometry"
+              ]
+            },
+            {
+              "name": "reference_image",
+              "type": "file",
+              "required": false,
+              "desc": "One style reference, as the style-transfer route takes it."
+            },
+            {
+              "name": "<setting>",
+              "type": "string",
+              "required": false,
+              "desc": "Any setting of the engine's panel, by its snake_case name (`render_style`, `camera_angle`, …), matched to a value or label. A field or value the engine has no use for is listed under `parameters.ignored`."
+            }
+          ],
+          "answers": [
+            {
+              "status": 200,
+              "label": "Started: poll `GET /v1/status/{id}` with the id",
+              "body": {
+                "status": "success",
+                "id": "218831",
+                "prompt": "Modern building exterior",
+                "expert_name": "exterior",
+                "cost": 30,
+                "credits": 4970
+              }
+            },
+            {
+              "status": 400,
+              "label": "Refused: nothing was charged",
+              "body": {
+                "status": "error",
+                "code": "NO_CREDITS",
+                "message": "Not enough credits for this generation."
+              }
+            }
+          ],
           "engine": "v4.4-ultra"
         },
         "tags": [
@@ -3142,14 +3417,132 @@
     "/v1/archDiffusion-v44-lite": {
       "post": {
         "operationId": "legacyV1ArchDiffusionV44Lite",
-        "summary": "Legacy alias of /v1/renders. The same engine. Needs an account that has paid.",
+        "summary": "Legacy alias of /v2/renders. The same engine. Needs an account that has paid: a top-up, or a balance moved from mnmlai.dev.",
         "deprecated": true,
         "x-mnml-legacy": {
           "kind": "render",
-          "successor": "/v1/renders",
+          "successor": "/v2/renders",
           "legacyCredits": "1",
           "paidOnly": true,
           "note": "The same engine.",
+          "idKey": "id",
+          "fields": [
+            {
+              "name": "image",
+              "type": "file",
+              "required": true,
+              "desc": "The source image: JPEG, PNG or WebP."
+            },
+            {
+              "name": "prompt",
+              "type": "string",
+              "required": false,
+              "desc": "What to render. Each mode has a default when it is left out."
+            },
+            {
+              "name": "expert_name",
+              "type": "string",
+              "required": false,
+              "desc": "The mode. Default `exterior`, which an unknown value also falls back to. `imageType` is read the same way.",
+              "values": [
+                "exterior",
+                "interior",
+                "masterplan",
+                "plan",
+                "landscape",
+                "product"
+              ]
+            },
+            {
+              "name": "prompt_mode",
+              "type": "string",
+              "required": false,
+              "desc": "`edit` changes the image as the prompt says instead of rendering it anew; it needs a `prompt`.",
+              "values": [
+                "edit"
+              ]
+            },
+            {
+              "name": "aspect_ratio",
+              "type": "string",
+              "required": false,
+              "desc": "The output shape. `square`, `vertical`, `horizontal` and `match_input_image` are read too; a value this engine cannot make is listed under `parameters.ignored`.",
+              "values": [
+                "auto",
+                "1:1",
+                "3:2",
+                "4:3",
+                "5:4",
+                "16:9",
+                "21:9",
+                "2:3",
+                "3:4",
+                "4:5",
+                "9:16"
+              ]
+            },
+            {
+              "name": "seed",
+              "type": "integer",
+              "required": false,
+              "desc": "A whole number, 0 or more, to repeat a result."
+            },
+            {
+              "name": "reference_image_1",
+              "type": "file",
+              "required": false,
+              "desc": "Up to four reference images, `reference_image_1` to `reference_image_4`."
+            },
+            {
+              "name": "reference_mode_1",
+              "type": "string",
+              "required": false,
+              "desc": "What each reference steers, `reference_mode_1` to `reference_mode_4`. `composition` and `inspiration` are read too. Default `auto`.",
+              "values": [
+                "auto",
+                "style",
+                "material",
+                "atmosphere",
+                "color",
+                "geometry"
+              ]
+            },
+            {
+              "name": "reference_image",
+              "type": "file",
+              "required": false,
+              "desc": "One style reference, as the style-transfer route takes it."
+            },
+            {
+              "name": "<setting>",
+              "type": "string",
+              "required": false,
+              "desc": "Any setting of the engine's panel, by its snake_case name (`render_style`, `camera_angle`, …), matched to a value or label. A field or value the engine has no use for is listed under `parameters.ignored`."
+            }
+          ],
+          "answers": [
+            {
+              "status": 200,
+              "label": "Started: poll `GET /v1/status/{id}` with the id",
+              "body": {
+                "status": "success",
+                "id": "218831",
+                "prompt": "Modern building exterior",
+                "expert_name": "exterior",
+                "cost": 30,
+                "credits": 4970
+              }
+            },
+            {
+              "status": 400,
+              "label": "Refused: nothing was charged",
+              "body": {
+                "status": "error",
+                "code": "NO_CREDITS",
+                "message": "Not enough credits for this generation."
+              }
+            }
+          ],
           "engine": "v4.4-fast"
         },
         "tags": [
@@ -3218,14 +3611,113 @@
     "/v1/archDiffusion-v43": {
       "post": {
         "operationId": "legacyV1ArchDiffusionV43",
-        "summary": "Legacy alias of /v1/renders. The same engine. Needs an account that has paid.",
+        "summary": "Legacy alias of /v2/renders. The same engine. Needs an account that has paid: a top-up, or a balance moved from mnmlai.dev.",
         "deprecated": true,
         "x-mnml-legacy": {
           "kind": "render",
-          "successor": "/v1/renders",
+          "successor": "/v2/renders",
           "legacyCredits": "3",
           "paidOnly": true,
           "note": "The same engine.",
+          "idKey": "id",
+          "fields": [
+            {
+              "name": "image",
+              "type": "file",
+              "required": true,
+              "desc": "The source image: JPEG, PNG or WebP."
+            },
+            {
+              "name": "prompt",
+              "type": "string",
+              "required": false,
+              "desc": "What to render. Each mode has a default when it is left out."
+            },
+            {
+              "name": "expert_name",
+              "type": "string",
+              "required": false,
+              "desc": "The mode. Default `exterior`, which an unknown value also falls back to. `imageType` is read the same way.",
+              "values": [
+                "exterior",
+                "interior",
+                "masterplan",
+                "plan",
+                "landscape",
+                "product"
+              ]
+            },
+            {
+              "name": "prompt_mode",
+              "type": "string",
+              "required": false,
+              "desc": "`edit` changes the image as the prompt says instead of rendering it anew; it needs a `prompt`.",
+              "values": [
+                "edit"
+              ]
+            },
+            {
+              "name": "seed",
+              "type": "integer",
+              "required": false,
+              "desc": "A whole number, 0 or more, to repeat a result."
+            },
+            {
+              "name": "reference_image_1",
+              "type": "file",
+              "required": false,
+              "desc": "Up to four reference images, `reference_image_1` to `reference_image_4`."
+            },
+            {
+              "name": "reference_mode_1",
+              "type": "string",
+              "required": false,
+              "desc": "What each reference steers, `reference_mode_1` to `reference_mode_4`. `composition` and `inspiration` are read too. Default `auto`.",
+              "values": [
+                "auto",
+                "style",
+                "material",
+                "atmosphere",
+                "color",
+                "geometry"
+              ]
+            },
+            {
+              "name": "reference_image",
+              "type": "file",
+              "required": false,
+              "desc": "One style reference, as the style-transfer route takes it."
+            },
+            {
+              "name": "<setting>",
+              "type": "string",
+              "required": false,
+              "desc": "Any setting of the engine's panel, by its snake_case name (`render_style`, `camera_angle`, …), matched to a value or label. A field or value the engine has no use for is listed under `parameters.ignored`."
+            }
+          ],
+          "answers": [
+            {
+              "status": 200,
+              "label": "Started: poll `GET /v1/status/{id}` with the id",
+              "body": {
+                "status": "success",
+                "id": "218831",
+                "prompt": "Modern building exterior",
+                "expert_name": "exterior",
+                "cost": 30,
+                "credits": 4970
+              }
+            },
+            {
+              "status": 400,
+              "label": "Refused: nothing was charged",
+              "body": {
+                "status": "error",
+                "code": "NO_CREDITS",
+                "message": "Not enough credits for this generation."
+              }
+            }
+          ],
           "engine": "v4.3"
         },
         "tags": [
@@ -3294,14 +3786,113 @@
     "/v1/archDiffusion-v43-lite": {
       "post": {
         "operationId": "legacyV1ArchDiffusionV43Lite",
-        "summary": "Legacy alias of /v1/renders. The same engine. Needs an account that has paid.",
+        "summary": "Legacy alias of /v2/renders. The same engine. Needs an account that has paid: a top-up, or a balance moved from mnmlai.dev.",
         "deprecated": true,
         "x-mnml-legacy": {
           "kind": "render",
-          "successor": "/v1/renders",
+          "successor": "/v2/renders",
           "legacyCredits": "1",
           "paidOnly": true,
           "note": "The same engine.",
+          "idKey": "id",
+          "fields": [
+            {
+              "name": "image",
+              "type": "file",
+              "required": true,
+              "desc": "The source image: JPEG, PNG or WebP."
+            },
+            {
+              "name": "prompt",
+              "type": "string",
+              "required": false,
+              "desc": "What to render. Each mode has a default when it is left out."
+            },
+            {
+              "name": "expert_name",
+              "type": "string",
+              "required": false,
+              "desc": "The mode. Default `exterior`, which an unknown value also falls back to. `imageType` is read the same way.",
+              "values": [
+                "exterior",
+                "interior",
+                "masterplan",
+                "plan",
+                "landscape",
+                "product"
+              ]
+            },
+            {
+              "name": "prompt_mode",
+              "type": "string",
+              "required": false,
+              "desc": "`edit` changes the image as the prompt says instead of rendering it anew; it needs a `prompt`.",
+              "values": [
+                "edit"
+              ]
+            },
+            {
+              "name": "seed",
+              "type": "integer",
+              "required": false,
+              "desc": "A whole number, 0 or more, to repeat a result."
+            },
+            {
+              "name": "reference_image_1",
+              "type": "file",
+              "required": false,
+              "desc": "Up to four reference images, `reference_image_1` to `reference_image_4`."
+            },
+            {
+              "name": "reference_mode_1",
+              "type": "string",
+              "required": false,
+              "desc": "What each reference steers, `reference_mode_1` to `reference_mode_4`. `composition` and `inspiration` are read too. Default `auto`.",
+              "values": [
+                "auto",
+                "style",
+                "material",
+                "atmosphere",
+                "color",
+                "geometry"
+              ]
+            },
+            {
+              "name": "reference_image",
+              "type": "file",
+              "required": false,
+              "desc": "One style reference, as the style-transfer route takes it."
+            },
+            {
+              "name": "<setting>",
+              "type": "string",
+              "required": false,
+              "desc": "Any setting of the engine's panel, by its snake_case name (`render_style`, `camera_angle`, …), matched to a value or label. A field or value the engine has no use for is listed under `parameters.ignored`."
+            }
+          ],
+          "answers": [
+            {
+              "status": 200,
+              "label": "Started: poll `GET /v1/status/{id}` with the id",
+              "body": {
+                "status": "success",
+                "id": "218831",
+                "prompt": "Modern building exterior",
+                "expert_name": "exterior",
+                "cost": 30,
+                "credits": 4970
+              }
+            },
+            {
+              "status": 400,
+              "label": "Refused: nothing was charged",
+              "body": {
+                "status": "error",
+                "code": "NO_CREDITS",
+                "message": "Not enough credits for this generation."
+              }
+            }
+          ],
           "engine": "v4.3-fast"
         },
         "tags": [
@@ -3370,14 +3961,113 @@
     "/v1/archDiffusion-v42": {
       "post": {
         "operationId": "legacyV1ArchDiffusionV42",
-        "summary": "Legacy alias of /v1/renders. v4.2 is retired; it runs on v4.3, its nearest current tier. Needs an account that has paid.",
+        "summary": "Legacy alias of /v2/renders. v4.2 is retired; it runs on v4.3, its nearest current tier. Needs an account that has paid: a top-up, or a balance moved from mnmlai.dev.",
         "deprecated": true,
         "x-mnml-legacy": {
           "kind": "render",
-          "successor": "/v1/renders",
+          "successor": "/v2/renders",
           "legacyCredits": "4",
           "paidOnly": true,
           "note": "v4.2 is retired; it runs on v4.3, its nearest current tier.",
+          "idKey": "id",
+          "fields": [
+            {
+              "name": "image",
+              "type": "file",
+              "required": true,
+              "desc": "The source image: JPEG, PNG or WebP."
+            },
+            {
+              "name": "prompt",
+              "type": "string",
+              "required": false,
+              "desc": "What to render. Each mode has a default when it is left out."
+            },
+            {
+              "name": "expert_name",
+              "type": "string",
+              "required": false,
+              "desc": "The mode. Default `exterior`, which an unknown value also falls back to. `imageType` is read the same way.",
+              "values": [
+                "exterior",
+                "interior",
+                "masterplan",
+                "plan",
+                "landscape",
+                "product"
+              ]
+            },
+            {
+              "name": "prompt_mode",
+              "type": "string",
+              "required": false,
+              "desc": "`edit` changes the image as the prompt says instead of rendering it anew; it needs a `prompt`.",
+              "values": [
+                "edit"
+              ]
+            },
+            {
+              "name": "seed",
+              "type": "integer",
+              "required": false,
+              "desc": "A whole number, 0 or more, to repeat a result."
+            },
+            {
+              "name": "reference_image_1",
+              "type": "file",
+              "required": false,
+              "desc": "Up to four reference images, `reference_image_1` to `reference_image_4`."
+            },
+            {
+              "name": "reference_mode_1",
+              "type": "string",
+              "required": false,
+              "desc": "What each reference steers, `reference_mode_1` to `reference_mode_4`. `composition` and `inspiration` are read too. Default `auto`.",
+              "values": [
+                "auto",
+                "style",
+                "material",
+                "atmosphere",
+                "color",
+                "geometry"
+              ]
+            },
+            {
+              "name": "reference_image",
+              "type": "file",
+              "required": false,
+              "desc": "One style reference, as the style-transfer route takes it."
+            },
+            {
+              "name": "<setting>",
+              "type": "string",
+              "required": false,
+              "desc": "Any setting of the engine's panel, by its snake_case name (`render_style`, `camera_angle`, …), matched to a value or label. A field or value the engine has no use for is listed under `parameters.ignored`."
+            }
+          ],
+          "answers": [
+            {
+              "status": 200,
+              "label": "Started: poll `GET /v1/status/{id}` with the id",
+              "body": {
+                "status": "success",
+                "id": "218831",
+                "prompt": "Modern building exterior",
+                "expert_name": "exterior",
+                "cost": 30,
+                "credits": 4970
+              }
+            },
+            {
+              "status": 400,
+              "label": "Refused: nothing was charged",
+              "body": {
+                "status": "error",
+                "code": "NO_CREDITS",
+                "message": "Not enough credits for this generation."
+              }
+            }
+          ],
           "engine": "v4.3"
         },
         "tags": [
@@ -3446,14 +4136,113 @@
     "/v1/archDiffusion-v42-lite": {
       "post": {
         "operationId": "legacyV1ArchDiffusionV42Lite",
-        "summary": "Legacy alias of /v1/renders. v4.2 Fast is retired; it runs on v4.3 Fast. Needs an account that has paid.",
+        "summary": "Legacy alias of /v2/renders. v4.2 Fast is retired; it runs on v4.3 Fast. Needs an account that has paid: a top-up, or a balance moved from mnmlai.dev.",
         "deprecated": true,
         "x-mnml-legacy": {
           "kind": "render",
-          "successor": "/v1/renders",
+          "successor": "/v2/renders",
           "legacyCredits": "1",
           "paidOnly": true,
           "note": "v4.2 Fast is retired; it runs on v4.3 Fast.",
+          "idKey": "id",
+          "fields": [
+            {
+              "name": "image",
+              "type": "file",
+              "required": true,
+              "desc": "The source image: JPEG, PNG or WebP."
+            },
+            {
+              "name": "prompt",
+              "type": "string",
+              "required": false,
+              "desc": "What to render. Each mode has a default when it is left out."
+            },
+            {
+              "name": "expert_name",
+              "type": "string",
+              "required": false,
+              "desc": "The mode. Default `exterior`, which an unknown value also falls back to. `imageType` is read the same way.",
+              "values": [
+                "exterior",
+                "interior",
+                "masterplan",
+                "plan",
+                "landscape",
+                "product"
+              ]
+            },
+            {
+              "name": "prompt_mode",
+              "type": "string",
+              "required": false,
+              "desc": "`edit` changes the image as the prompt says instead of rendering it anew; it needs a `prompt`.",
+              "values": [
+                "edit"
+              ]
+            },
+            {
+              "name": "seed",
+              "type": "integer",
+              "required": false,
+              "desc": "A whole number, 0 or more, to repeat a result."
+            },
+            {
+              "name": "reference_image_1",
+              "type": "file",
+              "required": false,
+              "desc": "Up to four reference images, `reference_image_1` to `reference_image_4`."
+            },
+            {
+              "name": "reference_mode_1",
+              "type": "string",
+              "required": false,
+              "desc": "What each reference steers, `reference_mode_1` to `reference_mode_4`. `composition` and `inspiration` are read too. Default `auto`.",
+              "values": [
+                "auto",
+                "style",
+                "material",
+                "atmosphere",
+                "color",
+                "geometry"
+              ]
+            },
+            {
+              "name": "reference_image",
+              "type": "file",
+              "required": false,
+              "desc": "One style reference, as the style-transfer route takes it."
+            },
+            {
+              "name": "<setting>",
+              "type": "string",
+              "required": false,
+              "desc": "Any setting of the engine's panel, by its snake_case name (`render_style`, `camera_angle`, …), matched to a value or label. A field or value the engine has no use for is listed under `parameters.ignored`."
+            }
+          ],
+          "answers": [
+            {
+              "status": 200,
+              "label": "Started: poll `GET /v1/status/{id}` with the id",
+              "body": {
+                "status": "success",
+                "id": "218831",
+                "prompt": "Modern building exterior",
+                "expert_name": "exterior",
+                "cost": 30,
+                "credits": 4970
+              }
+            },
+            {
+              "status": 400,
+              "label": "Refused: nothing was charged",
+              "body": {
+                "status": "error",
+                "code": "NO_CREDITS",
+                "message": "Not enough credits for this generation."
+              }
+            }
+          ],
           "engine": "v4.3-fast"
         },
         "tags": [
@@ -3522,14 +4311,113 @@
     "/v1/archDiffusion-v41": {
       "post": {
         "operationId": "legacyV1ArchDiffusionV41",
-        "summary": "Legacy alias of /v1/renders. v4.1 is retired; it runs on v4.3. Needs an account that has paid.",
+        "summary": "Legacy alias of /v2/renders. v4.1 is retired; it runs on v4.3. Needs an account that has paid: a top-up, or a balance moved from mnmlai.dev.",
         "deprecated": true,
         "x-mnml-legacy": {
           "kind": "render",
-          "successor": "/v1/renders",
+          "successor": "/v2/renders",
           "legacyCredits": "5",
           "paidOnly": true,
           "note": "v4.1 is retired; it runs on v4.3.",
+          "idKey": "id",
+          "fields": [
+            {
+              "name": "image",
+              "type": "file",
+              "required": true,
+              "desc": "The source image: JPEG, PNG or WebP."
+            },
+            {
+              "name": "prompt",
+              "type": "string",
+              "required": false,
+              "desc": "What to render. Each mode has a default when it is left out."
+            },
+            {
+              "name": "expert_name",
+              "type": "string",
+              "required": false,
+              "desc": "The mode. Default `exterior`, which an unknown value also falls back to. `imageType` is read the same way.",
+              "values": [
+                "exterior",
+                "interior",
+                "masterplan",
+                "plan",
+                "landscape",
+                "product"
+              ]
+            },
+            {
+              "name": "prompt_mode",
+              "type": "string",
+              "required": false,
+              "desc": "`edit` changes the image as the prompt says instead of rendering it anew; it needs a `prompt`.",
+              "values": [
+                "edit"
+              ]
+            },
+            {
+              "name": "seed",
+              "type": "integer",
+              "required": false,
+              "desc": "A whole number, 0 or more, to repeat a result."
+            },
+            {
+              "name": "reference_image_1",
+              "type": "file",
+              "required": false,
+              "desc": "Up to four reference images, `reference_image_1` to `reference_image_4`."
+            },
+            {
+              "name": "reference_mode_1",
+              "type": "string",
+              "required": false,
+              "desc": "What each reference steers, `reference_mode_1` to `reference_mode_4`. `composition` and `inspiration` are read too. Default `auto`.",
+              "values": [
+                "auto",
+                "style",
+                "material",
+                "atmosphere",
+                "color",
+                "geometry"
+              ]
+            },
+            {
+              "name": "reference_image",
+              "type": "file",
+              "required": false,
+              "desc": "One style reference, as the style-transfer route takes it."
+            },
+            {
+              "name": "<setting>",
+              "type": "string",
+              "required": false,
+              "desc": "Any setting of the engine's panel, by its snake_case name (`render_style`, `camera_angle`, …), matched to a value or label. A field or value the engine has no use for is listed under `parameters.ignored`."
+            }
+          ],
+          "answers": [
+            {
+              "status": 200,
+              "label": "Started: poll `GET /v1/status/{id}` with the id",
+              "body": {
+                "status": "success",
+                "id": "218831",
+                "prompt": "Modern building exterior",
+                "expert_name": "exterior",
+                "cost": 30,
+                "credits": 4970
+              }
+            },
+            {
+              "status": 400,
+              "label": "Refused: nothing was charged",
+              "body": {
+                "status": "error",
+                "code": "NO_CREDITS",
+                "message": "Not enough credits for this generation."
+              }
+            }
+          ],
           "engine": "v4.3"
         },
         "tags": [
@@ -3598,14 +4486,132 @@
     "/v1/mixture-of-experts": {
       "post": {
         "operationId": "legacyV1MixtureOfExperts",
-        "summary": "Legacy alias of /v1/renders. Runs on v4.6, with `expert_name` as the mode.",
+        "summary": "Legacy alias of /v2/renders. Runs on v4.6, with `expert_name` as the mode.",
         "deprecated": true,
         "x-mnml-legacy": {
           "kind": "render",
-          "successor": "/v1/renders",
+          "successor": "/v2/renders",
           "legacyCredits": "1",
           "paidOnly": false,
           "note": "Runs on v4.6, with `expert_name` as the mode.",
+          "idKey": "id",
+          "fields": [
+            {
+              "name": "image",
+              "type": "file",
+              "required": true,
+              "desc": "The source image: JPEG, PNG or WebP."
+            },
+            {
+              "name": "prompt",
+              "type": "string",
+              "required": false,
+              "desc": "What to render. Each mode has a default when it is left out."
+            },
+            {
+              "name": "expert_name",
+              "type": "string",
+              "required": false,
+              "desc": "The mode. Default `exterior`, which an unknown value also falls back to. `imageType` is read the same way.",
+              "values": [
+                "exterior",
+                "interior",
+                "masterplan",
+                "plan",
+                "landscape",
+                "product"
+              ]
+            },
+            {
+              "name": "prompt_mode",
+              "type": "string",
+              "required": false,
+              "desc": "`edit` changes the image as the prompt says instead of rendering it anew; it needs a `prompt`.",
+              "values": [
+                "edit"
+              ]
+            },
+            {
+              "name": "aspect_ratio",
+              "type": "string",
+              "required": false,
+              "desc": "The output shape. `square`, `vertical`, `horizontal` and `match_input_image` are read too; a value this engine cannot make is listed under `parameters.ignored`.",
+              "values": [
+                "auto",
+                "1:1",
+                "3:2",
+                "4:3",
+                "5:4",
+                "16:9",
+                "21:9",
+                "2:3",
+                "3:4",
+                "4:5",
+                "9:16"
+              ]
+            },
+            {
+              "name": "seed",
+              "type": "integer",
+              "required": false,
+              "desc": "A whole number, 0 or more, to repeat a result."
+            },
+            {
+              "name": "reference_image_1",
+              "type": "file",
+              "required": false,
+              "desc": "Up to four reference images, `reference_image_1` to `reference_image_4`."
+            },
+            {
+              "name": "reference_mode_1",
+              "type": "string",
+              "required": false,
+              "desc": "What each reference steers, `reference_mode_1` to `reference_mode_4`. `composition` and `inspiration` are read too. Default `auto`.",
+              "values": [
+                "auto",
+                "style",
+                "material",
+                "atmosphere",
+                "color",
+                "geometry"
+              ]
+            },
+            {
+              "name": "reference_image",
+              "type": "file",
+              "required": false,
+              "desc": "One style reference, as the style-transfer route takes it."
+            },
+            {
+              "name": "<setting>",
+              "type": "string",
+              "required": false,
+              "desc": "Any setting of the engine's panel, by its snake_case name (`render_style`, `camera_angle`, …), matched to a value or label. A field or value the engine has no use for is listed under `parameters.ignored`."
+            }
+          ],
+          "answers": [
+            {
+              "status": 200,
+              "label": "Started: poll `GET /v1/status/{id}` with the id",
+              "body": {
+                "status": "success",
+                "id": "218831",
+                "prompt": "Modern building exterior",
+                "expert_name": "exterior",
+                "cost": 30,
+                "credits": 4970
+              }
+            },
+            {
+              "status": 400,
+              "label": "Refused: nothing was charged",
+              "body": {
+                "status": "error",
+                "code": "NO_CREDITS",
+                "message": "Not enough credits for this generation."
+              }
+            }
+          ],
           "engine": "v4.6-ultra"
         },
         "tags": [
@@ -3674,14 +4680,109 @@
     "/v1/exterior": {
       "post": {
         "operationId": "legacyV1Exterior",
-        "summary": "Legacy alias of /v1/renders. Runs on v3.1. The workflow knobs (`scenario`, `geometry_input`, `renderspeed`, `styles`) are not read. Needs an account that has paid.",
+        "summary": "Legacy alias of /v2/renders. Runs on v3.1. The workflow knobs (`scenario`, `geometry_input`, `renderspeed`, `styles`) are not read. Needs an account that has paid: a top-up, or a balance moved from mnmlai.dev.",
         "deprecated": true,
         "x-mnml-legacy": {
           "kind": "render",
-          "successor": "/v1/renders",
+          "successor": "/v2/renders",
           "legacyCredits": "1",
           "paidOnly": true,
           "note": "Runs on v3.1. The workflow knobs (`scenario`, `geometry_input`, `renderspeed`, `styles`) are not read.",
+          "idKey": "id",
+          "fields": [
+            {
+              "name": "image",
+              "type": "file",
+              "required": true,
+              "desc": "The source image: JPEG, PNG or WebP."
+            },
+            {
+              "name": "prompt",
+              "type": "string",
+              "required": false,
+              "desc": "What to render. Each mode has a default when it is left out."
+            },
+            {
+              "name": "aspect_ratio",
+              "type": "string",
+              "required": false,
+              "desc": "The output shape. `square`, `vertical`, `horizontal` and `match_input_image` are read too; a value this engine cannot make is listed under `parameters.ignored`.",
+              "values": [
+                "auto",
+                "1:1",
+                "3:2",
+                "4:3",
+                "5:4",
+                "16:9",
+                "21:9",
+                "2:3",
+                "3:4",
+                "4:5",
+                "9:16"
+              ]
+            },
+            {
+              "name": "seed",
+              "type": "integer",
+              "required": false,
+              "desc": "A whole number, 0 or more, to repeat a result."
+            },
+            {
+              "name": "reference_image_1",
+              "type": "file",
+              "required": false,
+              "desc": "Up to four reference images, `reference_image_1` to `reference_image_4`."
+            },
+            {
+              "name": "reference_mode_1",
+              "type": "string",
+              "required": false,
+              "desc": "What each reference steers, `reference_mode_1` to `reference_mode_4`. `composition` and `inspiration` are read too. Default `auto`.",
+              "values": [
+                "auto",
+                "style",
+                "material",
+                "atmosphere",
+                "color",
+                "geometry"
+              ]
+            },
+            {
+              "name": "reference_image",
+              "type": "file",
+              "required": false,
+              "desc": "One style reference, as the style-transfer route takes it."
+            },
+            {
+              "name": "<setting>",
+              "type": "string",
+              "required": false,
+              "desc": "Any setting of the engine's panel, by its snake_case name (`render_style`, `camera_angle`, …), matched to a value or label. A field or value the engine has no use for is listed under `parameters.ignored`."
+            }
+          ],
+          "answers": [
+            {
+              "status": 200,
+              "label": "Started: poll `GET /v1/status/{id}` with the id",
+              "body": {
+                "status": "success",
+                "id": "218831",
+                "prompt": "Modern building exterior",
+                "expert_name": "exterior",
+                "cost": 30,
+                "credits": 4970
+              }
+            },
+            {
+              "status": 400,
+              "label": "Refused: nothing was charged",
+              "body": {
+                "status": "error",
+                "code": "NO_CREDITS",
+                "message": "Not enough credits for this generation."
+              }
+            }
+          ],
           "engine": "v3.1",
           "mode": "exterior"
         },
@@ -3751,14 +4852,109 @@
     "/v1/interior": {
       "post": {
         "operationId": "legacyV1Interior",
-        "summary": "Legacy alias of /v1/renders. Runs on v3.1. The workflow knobs are not read. Needs an account that has paid.",
+        "summary": "Legacy alias of /v2/renders. Runs on v3.1. The workflow knobs are not read. Needs an account that has paid: a top-up, or a balance moved from mnmlai.dev.",
         "deprecated": true,
         "x-mnml-legacy": {
           "kind": "render",
-          "successor": "/v1/renders",
+          "successor": "/v2/renders",
           "legacyCredits": "1",
           "paidOnly": true,
           "note": "Runs on v3.1. The workflow knobs are not read.",
+          "idKey": "id",
+          "fields": [
+            {
+              "name": "image",
+              "type": "file",
+              "required": true,
+              "desc": "The source image: JPEG, PNG or WebP."
+            },
+            {
+              "name": "prompt",
+              "type": "string",
+              "required": false,
+              "desc": "What to render. Each mode has a default when it is left out."
+            },
+            {
+              "name": "aspect_ratio",
+              "type": "string",
+              "required": false,
+              "desc": "The output shape. `square`, `vertical`, `horizontal` and `match_input_image` are read too; a value this engine cannot make is listed under `parameters.ignored`.",
+              "values": [
+                "auto",
+                "1:1",
+                "3:2",
+                "4:3",
+                "5:4",
+                "16:9",
+                "21:9",
+                "2:3",
+                "3:4",
+                "4:5",
+                "9:16"
+              ]
+            },
+            {
+              "name": "seed",
+              "type": "integer",
+              "required": false,
+              "desc": "A whole number, 0 or more, to repeat a result."
+            },
+            {
+              "name": "reference_image_1",
+              "type": "file",
+              "required": false,
+              "desc": "Up to four reference images, `reference_image_1` to `reference_image_4`."
+            },
+            {
+              "name": "reference_mode_1",
+              "type": "string",
+              "required": false,
+              "desc": "What each reference steers, `reference_mode_1` to `reference_mode_4`. `composition` and `inspiration` are read too. Default `auto`.",
+              "values": [
+                "auto",
+                "style",
+                "material",
+                "atmosphere",
+                "color",
+                "geometry"
+              ]
+            },
+            {
+              "name": "reference_image",
+              "type": "file",
+              "required": false,
+              "desc": "One style reference, as the style-transfer route takes it."
+            },
+            {
+              "name": "<setting>",
+              "type": "string",
+              "required": false,
+              "desc": "Any setting of the engine's panel, by its snake_case name (`render_style`, `camera_angle`, …), matched to a value or label. A field or value the engine has no use for is listed under `parameters.ignored`."
+            }
+          ],
+          "answers": [
+            {
+              "status": 200,
+              "label": "Started: poll `GET /v1/status/{id}` with the id",
+              "body": {
+                "status": "success",
+                "id": "218831",
+                "prompt": "Modern building exterior",
+                "expert_name": "interior",
+                "cost": 30,
+                "credits": 4970
+              }
+            },
+            {
+              "status": 400,
+              "label": "Refused: nothing was charged",
+              "body": {
+                "status": "error",
+                "code": "NO_CREDITS",
+                "message": "Not enough credits for this generation."
+              }
+            }
+          ],
           "engine": "v3.1",
           "mode": "interior"
         },
@@ -3828,14 +5024,132 @@
     "/v1/sketch-to-img": {
       "post": {
         "operationId": "legacyV1SketchToImg",
-        "summary": "Legacy alias of /v1/renders. Runs on v3.1, with `imageType` as the mode. Needs an account that has paid.",
+        "summary": "Legacy alias of /v2/renders. Runs on v3.1, with `imageType` as the mode. Needs an account that has paid: a top-up, or a balance moved from mnmlai.dev.",
         "deprecated": true,
         "x-mnml-legacy": {
           "kind": "render",
-          "successor": "/v1/renders",
+          "successor": "/v2/renders",
           "legacyCredits": "1",
           "paidOnly": true,
           "note": "Runs on v3.1, with `imageType` as the mode.",
+          "idKey": "id",
+          "fields": [
+            {
+              "name": "image",
+              "type": "file",
+              "required": true,
+              "desc": "The source image: JPEG, PNG or WebP."
+            },
+            {
+              "name": "prompt",
+              "type": "string",
+              "required": false,
+              "desc": "What to render. Each mode has a default when it is left out."
+            },
+            {
+              "name": "expert_name",
+              "type": "string",
+              "required": false,
+              "desc": "The mode. Default `exterior`, which an unknown value also falls back to. `imageType` is read the same way.",
+              "values": [
+                "exterior",
+                "interior",
+                "masterplan",
+                "plan",
+                "landscape",
+                "product"
+              ]
+            },
+            {
+              "name": "prompt_mode",
+              "type": "string",
+              "required": false,
+              "desc": "`edit` changes the image as the prompt says instead of rendering it anew; it needs a `prompt`.",
+              "values": [
+                "edit"
+              ]
+            },
+            {
+              "name": "aspect_ratio",
+              "type": "string",
+              "required": false,
+              "desc": "The output shape. `square`, `vertical`, `horizontal` and `match_input_image` are read too; a value this engine cannot make is listed under `parameters.ignored`.",
+              "values": [
+                "auto",
+                "1:1",
+                "3:2",
+                "4:3",
+                "5:4",
+                "16:9",
+                "21:9",
+                "2:3",
+                "3:4",
+                "4:5",
+                "9:16"
+              ]
+            },
+            {
+              "name": "seed",
+              "type": "integer",
+              "required": false,
+              "desc": "A whole number, 0 or more, to repeat a result."
+            },
+            {
+              "name": "reference_image_1",
+              "type": "file",
+              "required": false,
+              "desc": "Up to four reference images, `reference_image_1` to `reference_image_4`."
+            },
+            {
+              "name": "reference_mode_1",
+              "type": "string",
+              "required": false,
+              "desc": "What each reference steers, `reference_mode_1` to `reference_mode_4`. `composition` and `inspiration` are read too. Default `auto`.",
+              "values": [
+                "auto",
+                "style",
+                "material",
+                "atmosphere",
+                "color",
+                "geometry"
+              ]
+            },
+            {
+              "name": "reference_image",
+              "type": "file",
+              "required": false,
+              "desc": "One style reference, as the style-transfer route takes it."
+            },
+            {
+              "name": "<setting>",
+              "type": "string",
+              "required": false,
+              "desc": "Any setting of the engine's panel, by its snake_case name (`render_style`, `camera_angle`, …), matched to a value or label. A field or value the engine has no use for is listed under `parameters.ignored`."
+            }
+          ],
+          "answers": [
+            {
+              "status": 200,
+              "label": "Started: poll `GET /v1/status/{id}` with the id",
+              "body": {
+                "status": "success",
+                "id": "218831",
+                "prompt": "Modern building exterior",
+                "expert_name": "exterior",
+                "cost": 30,
+                "credits": 4970
+              }
+            },
+            {
+              "status": 400,
+              "label": "Refused: nothing was charged",
+              "body": {
+                "status": "error",
+                "code": "NO_CREDITS",
+                "message": "Not enough credits for this generation."
+              }
+            }
+          ],
           "engine": "v3.1"
         },
         "tags": [
@@ -3904,14 +5218,132 @@
     "/v1/style/transfer": {
       "post": {
         "operationId": "legacyV1StyleTransfer",
-        "summary": "Legacy alias of /v1/renders. Runs on v3.1, with `reference_image` as a style reference. Needs an account that has paid.",
+        "summary": "Legacy alias of /v2/renders. Runs on v3.1, with `reference_image` as a style reference. Needs an account that has paid: a top-up, or a balance moved from mnmlai.dev.",
         "deprecated": true,
         "x-mnml-legacy": {
           "kind": "render",
-          "successor": "/v1/renders",
+          "successor": "/v2/renders",
           "legacyCredits": "1",
           "paidOnly": true,
           "note": "Runs on v3.1, with `reference_image` as a style reference.",
+          "idKey": "id",
+          "fields": [
+            {
+              "name": "image",
+              "type": "file",
+              "required": true,
+              "desc": "The source image: JPEG, PNG or WebP."
+            },
+            {
+              "name": "prompt",
+              "type": "string",
+              "required": false,
+              "desc": "What to render. Each mode has a default when it is left out."
+            },
+            {
+              "name": "expert_name",
+              "type": "string",
+              "required": false,
+              "desc": "The mode. Default `exterior`, which an unknown value also falls back to. `imageType` is read the same way.",
+              "values": [
+                "exterior",
+                "interior",
+                "masterplan",
+                "plan",
+                "landscape",
+                "product"
+              ]
+            },
+            {
+              "name": "prompt_mode",
+              "type": "string",
+              "required": false,
+              "desc": "`edit` changes the image as the prompt says instead of rendering it anew; it needs a `prompt`.",
+              "values": [
+                "edit"
+              ]
+            },
+            {
+              "name": "aspect_ratio",
+              "type": "string",
+              "required": false,
+              "desc": "The output shape. `square`, `vertical`, `horizontal` and `match_input_image` are read too; a value this engine cannot make is listed under `parameters.ignored`.",
+              "values": [
+                "auto",
+                "1:1",
+                "3:2",
+                "4:3",
+                "5:4",
+                "16:9",
+                "21:9",
+                "2:3",
+                "3:4",
+                "4:5",
+                "9:16"
+              ]
+            },
+            {
+              "name": "seed",
+              "type": "integer",
+              "required": false,
+              "desc": "A whole number, 0 or more, to repeat a result."
+            },
+            {
+              "name": "reference_image_1",
+              "type": "file",
+              "required": false,
+              "desc": "Up to four reference images, `reference_image_1` to `reference_image_4`."
+            },
+            {
+              "name": "reference_mode_1",
+              "type": "string",
+              "required": false,
+              "desc": "What each reference steers, `reference_mode_1` to `reference_mode_4`. `composition` and `inspiration` are read too. Default `auto`.",
+              "values": [
+                "auto",
+                "style",
+                "material",
+                "atmosphere",
+                "color",
+                "geometry"
+              ]
+            },
+            {
+              "name": "reference_image",
+              "type": "file",
+              "required": false,
+              "desc": "One style reference, as the style-transfer route takes it."
+            },
+            {
+              "name": "<setting>",
+              "type": "string",
+              "required": false,
+              "desc": "Any setting of the engine's panel, by its snake_case name (`render_style`, `camera_angle`, …), matched to a value or label. A field or value the engine has no use for is listed under `parameters.ignored`."
+            }
+          ],
+          "answers": [
+            {
+              "status": 200,
+              "label": "Started: poll `GET /v1/status/{id}` with the id",
+              "body": {
+                "status": "success",
+                "id": "218831",
+                "prompt": "Modern building exterior",
+                "expert_name": "exterior",
+                "cost": 30,
+                "credits": 4970
+              }
+            },
+            {
+              "status": 400,
+              "label": "Refused: nothing was charged",
+              "body": {
+                "status": "error",
+                "code": "NO_CREDITS",
+                "message": "Not enough credits for this generation."
+              }
+            }
+          ],
           "engine": "v3.1"
         },
         "tags": [
@@ -3980,14 +5412,109 @@
     "/v1/imagine-ai": {
       "post": {
         "operationId": "legacyV1ImagineAi",
-        "summary": "Legacy alias of /v1/renders. Text to render on v4.6.",
+        "summary": "Legacy alias of /v2/renders. Text to render on v4.6.",
         "deprecated": true,
         "x-mnml-legacy": {
           "kind": "render",
-          "successor": "/v1/renders",
+          "successor": "/v2/renders",
           "legacyCredits": "0.5",
           "paidOnly": false,
           "note": "Text to render on v4.6.",
+          "idKey": "prediction_id",
+          "fields": [
+            {
+              "name": "image",
+              "type": "file",
+              "required": false,
+              "desc": "An optional image to start from."
+            },
+            {
+              "name": "prompt",
+              "type": "string",
+              "required": false,
+              "desc": "What to render. Each mode has a default when it is left out."
+            },
+            {
+              "name": "aspect_ratio",
+              "type": "string",
+              "required": false,
+              "desc": "The output shape. `square`, `vertical`, `horizontal` and `match_input_image` are read too; a value this engine cannot make is listed under `parameters.ignored`.",
+              "values": [
+                "auto",
+                "1:1",
+                "3:2",
+                "4:3",
+                "5:4",
+                "16:9",
+                "21:9",
+                "2:3",
+                "3:4",
+                "4:5",
+                "9:16"
+              ]
+            },
+            {
+              "name": "seed",
+              "type": "integer",
+              "required": false,
+              "desc": "A whole number, 0 or more, to repeat a result."
+            },
+            {
+              "name": "reference_image_1",
+              "type": "file",
+              "required": false,
+              "desc": "Up to four reference images, `reference_image_1` to `reference_image_4`."
+            },
+            {
+              "name": "reference_mode_1",
+              "type": "string",
+              "required": false,
+              "desc": "What each reference steers, `reference_mode_1` to `reference_mode_4`. `composition` and `inspiration` are read too. Default `auto`.",
+              "values": [
+                "auto",
+                "style",
+                "material",
+                "atmosphere",
+                "color",
+                "geometry"
+              ]
+            },
+            {
+              "name": "reference_image",
+              "type": "file",
+              "required": false,
+              "desc": "One style reference, as the style-transfer route takes it."
+            },
+            {
+              "name": "<setting>",
+              "type": "string",
+              "required": false,
+              "desc": "Any setting of the engine's panel, by its snake_case name (`render_style`, `camera_angle`, …), matched to a value or label. A field or value the engine has no use for is listed under `parameters.ignored`."
+            }
+          ],
+          "answers": [
+            {
+              "status": 200,
+              "label": "Started: poll `GET /v1/status/{id}` with the id",
+              "body": {
+                "status": "success",
+                "prediction_id": "218831",
+                "prompt": "Modern building exterior",
+                "expert_name": "text-to-render",
+                "cost": 30,
+                "credits": 4970
+              }
+            },
+            {
+              "status": 400,
+              "label": "Refused: nothing was charged",
+              "body": {
+                "status": "error",
+                "code": "NO_CREDITS",
+                "message": "Not enough credits for this generation."
+              }
+            }
+          ],
           "engine": "v4.6-ultra",
           "mode": "text-to-render"
         },
@@ -4057,14 +5584,109 @@
     "/v2/virtual-staging-ai": {
       "post": {
         "operationId": "legacyV2VirtualStagingAi",
-        "summary": "Legacy alias of /v1/renders. An interior render on v4.6, keeping the room.",
+        "summary": "Legacy alias of /v2/renders. An interior render on v4.6, keeping the room.",
         "deprecated": true,
         "x-mnml-legacy": {
           "kind": "render",
-          "successor": "/v1/renders",
+          "successor": "/v2/renders",
           "legacyCredits": "1",
           "paidOnly": false,
           "note": "An interior render on v4.6, keeping the room.",
+          "idKey": "prediction_id",
+          "fields": [
+            {
+              "name": "image",
+              "type": "file",
+              "required": true,
+              "desc": "The source image: JPEG, PNG or WebP."
+            },
+            {
+              "name": "prompt",
+              "type": "string",
+              "required": false,
+              "desc": "What to render. Each mode has a default when it is left out."
+            },
+            {
+              "name": "aspect_ratio",
+              "type": "string",
+              "required": false,
+              "desc": "The output shape. `square`, `vertical`, `horizontal` and `match_input_image` are read too; a value this engine cannot make is listed under `parameters.ignored`.",
+              "values": [
+                "auto",
+                "1:1",
+                "3:2",
+                "4:3",
+                "5:4",
+                "16:9",
+                "21:9",
+                "2:3",
+                "3:4",
+                "4:5",
+                "9:16"
+              ]
+            },
+            {
+              "name": "seed",
+              "type": "integer",
+              "required": false,
+              "desc": "A whole number, 0 or more, to repeat a result."
+            },
+            {
+              "name": "reference_image_1",
+              "type": "file",
+              "required": false,
+              "desc": "Up to four reference images, `reference_image_1` to `reference_image_4`."
+            },
+            {
+              "name": "reference_mode_1",
+              "type": "string",
+              "required": false,
+              "desc": "What each reference steers, `reference_mode_1` to `reference_mode_4`. `composition` and `inspiration` are read too. Default `auto`.",
+              "values": [
+                "auto",
+                "style",
+                "material",
+                "atmosphere",
+                "color",
+                "geometry"
+              ]
+            },
+            {
+              "name": "reference_image",
+              "type": "file",
+              "required": false,
+              "desc": "One style reference, as the style-transfer route takes it."
+            },
+            {
+              "name": "<setting>",
+              "type": "string",
+              "required": false,
+              "desc": "Any setting of the engine's panel, by its snake_case name (`render_style`, `camera_angle`, …), matched to a value or label. A field or value the engine has no use for is listed under `parameters.ignored`."
+            }
+          ],
+          "answers": [
+            {
+              "status": 200,
+              "label": "Started: poll `GET /v1/status/{id}` with the id",
+              "body": {
+                "status": "success",
+                "prediction_id": "218831",
+                "prompt": "Modern building exterior",
+                "expert_name": "interior",
+                "cost": 30,
+                "credits": 4970
+              }
+            },
+            {
+              "status": 400,
+              "label": "Refused: nothing was charged",
+              "body": {
+                "status": "error",
+                "code": "NO_CREDITS",
+                "message": "Not enough credits for this generation."
+              }
+            }
+          ],
           "engine": "v4.6-ultra",
           "mode": "interior"
         },
@@ -4134,14 +5756,57 @@
     "/v1/inpaint": {
       "post": {
         "operationId": "legacyV1Inpaint",
-        "summary": "Legacy alias of /v1/edits. A masked edit on v4.6.",
+        "summary": "Legacy alias of /v2/edits. A masked edit on v4.6.",
         "deprecated": true,
         "x-mnml-legacy": {
           "kind": "edit",
-          "successor": "/v1/edits",
+          "successor": "/v2/edits",
           "legacyCredits": "1",
           "paidOnly": false,
           "note": "A masked edit on v4.6.",
+          "idKey": "id",
+          "fields": [
+            {
+              "name": "image",
+              "type": "file",
+              "required": true,
+              "desc": "The source image: JPEG, PNG or WebP."
+            },
+            {
+              "name": "mask",
+              "type": "file",
+              "required": true,
+              "desc": "White where the image changes. Any image format; it is converted to PNG."
+            },
+            {
+              "name": "prompt",
+              "type": "string",
+              "required": true,
+              "desc": "What goes in the masked area."
+            }
+          ],
+          "answers": [
+            {
+              "status": 200,
+              "label": "Started: poll `GET /v1/status/{id}` with the id",
+              "body": {
+                "status": "success",
+                "id": "218831",
+                "prompt": "A walnut dining table",
+                "cost": 30,
+                "credits": 4970
+              }
+            },
+            {
+              "status": 400,
+              "label": "Refused: nothing was charged",
+              "body": {
+                "status": "error",
+                "code": "NO_CREDITS",
+                "message": "Not enough credits for this generation."
+              }
+            }
+          ],
           "engine": "v4.6-ultra"
         },
         "tags": [
@@ -4210,14 +5875,50 @@
     "/v1/ai-eraser": {
       "post": {
         "operationId": "legacyV1AiEraser",
-        "summary": "Legacy alias of /v1/edits. An erase (`kind: erase`).",
+        "summary": "Legacy alias of /v2/edits. An erase (`kind: erase`).",
         "deprecated": true,
         "x-mnml-legacy": {
           "kind": "erase",
-          "successor": "/v1/edits",
+          "successor": "/v2/edits",
           "legacyCredits": "1",
           "paidOnly": false,
-          "note": "An erase (`kind: erase`)."
+          "note": "An erase (`kind: erase`).",
+          "idKey": "id",
+          "fields": [
+            {
+              "name": "image",
+              "type": "file",
+              "required": true,
+              "desc": "The source image: JPEG, PNG or WebP."
+            },
+            {
+              "name": "mask",
+              "type": "file",
+              "required": true,
+              "desc": "White over what to remove. Any image format; it is converted to PNG."
+            }
+          ],
+          "answers": [
+            {
+              "status": 200,
+              "label": "Started: poll `GET /v1/status/{id}` with the id",
+              "body": {
+                "status": "success",
+                "id": "218831",
+                "cost": 30,
+                "credits": 4970
+              }
+            },
+            {
+              "status": 400,
+              "label": "Refused: nothing was charged",
+              "body": {
+                "status": "error",
+                "code": "NO_CREDITS",
+                "message": "Not enough credits for this generation."
+              }
+            }
+          ]
         },
         "tags": [
           "Legacy"
@@ -4285,14 +5986,44 @@
     "/v1/upscale": {
       "post": {
         "operationId": "legacyV1Upscale",
-        "summary": "Legacy alias of /v1/enhancements. `scale` and `face_enhance` are not read. Needs an account that has paid.",
+        "summary": "Legacy alias of /v2/enhancements. `scale` and `face_enhance` are not read. Needs an account that has paid: a top-up, or a balance moved from mnmlai.dev.",
         "deprecated": true,
         "x-mnml-legacy": {
           "kind": "enhance",
-          "successor": "/v1/enhancements",
+          "successor": "/v2/enhancements",
           "legacyCredits": "1",
           "paidOnly": true,
           "note": "`scale` and `face_enhance` are not read.",
+          "idKey": "id",
+          "fields": [
+            {
+              "name": "image",
+              "type": "file",
+              "required": true,
+              "desc": "The image to upscale."
+            }
+          ],
+          "answers": [
+            {
+              "status": 200,
+              "label": "Started: poll `GET /v1/status/{id}` with the id",
+              "body": {
+                "status": "success",
+                "id": "218831",
+                "cost": 30,
+                "credits": 4970
+              }
+            },
+            {
+              "status": 400,
+              "label": "Refused: nothing was charged",
+              "body": {
+                "status": "error",
+                "code": "NO_CREDITS",
+                "message": "Not enough credits for this generation."
+              }
+            }
+          ],
           "enhancement": "upscale"
         },
         "tags": [
@@ -4361,14 +6092,56 @@
     "/v1/render/enhancer": {
       "post": {
         "operationId": "legacyV1RenderEnhancer",
-        "summary": "Legacy alias of /v1/enhancements. An enhance. `creativity` (0–1) becomes 0–100; the other knobs are not read. Needs an account that has paid.",
+        "summary": "Legacy alias of /v2/enhancements. An enhance. `creativity` (0–1) becomes 0–100; the other knobs are not read. Needs an account that has paid: a top-up, or a balance moved from mnmlai.dev.",
         "deprecated": true,
         "x-mnml-legacy": {
           "kind": "enhance",
-          "successor": "/v1/enhancements",
+          "successor": "/v2/enhancements",
           "legacyCredits": "1",
           "paidOnly": true,
           "note": "An enhance. `creativity` (0–1) becomes 0–100; the other knobs are not read.",
+          "idKey": "id",
+          "fields": [
+            {
+              "name": "image",
+              "type": "file",
+              "required": true,
+              "desc": "The source image: JPEG, PNG or WebP."
+            },
+            {
+              "name": "creativity",
+              "type": "number",
+              "required": false,
+              "desc": "From 0 to 1: how far the enhancer may reinvent detail."
+            },
+            {
+              "name": "prompt",
+              "type": "string",
+              "required": false,
+              "desc": "What the enhancer should bring out."
+            }
+          ],
+          "answers": [
+            {
+              "status": 200,
+              "label": "Started: poll `GET /v1/status/{id}` with the id",
+              "body": {
+                "status": "success",
+                "id": "218831",
+                "cost": 30,
+                "credits": 4970
+              }
+            },
+            {
+              "status": 400,
+              "label": "Refused: nothing was charged",
+              "body": {
+                "status": "error",
+                "code": "NO_CREDITS",
+                "message": "Not enough credits for this generation."
+              }
+            }
+          ],
           "enhancement": "enhance"
         },
         "tags": [
@@ -4437,14 +6210,90 @@
     "/v1/video-v20-flash": {
       "post": {
         "operationId": "legacyV1VideoV20Flash",
-        "summary": "Legacy alias of /v1/videos. The same engine. Needs an account that has paid.",
+        "summary": "Legacy alias of /v2/videos. The same engine. Needs an account that has paid: a top-up, or a balance moved from mnmlai.dev.",
         "deprecated": true,
         "x-mnml-legacy": {
           "kind": "video",
-          "successor": "/v1/videos",
+          "successor": "/v2/videos",
           "legacyCredits": "1 per second",
           "paidOnly": true,
           "note": "The same engine.",
+          "idKey": "id",
+          "fields": [
+            {
+              "name": "image",
+              "type": "file",
+              "required": false,
+              "desc": "The first frame, as a file or as a link in the same field. Or `image_url`."
+            },
+            {
+              "name": "image_url",
+              "type": "url",
+              "required": false,
+              "desc": "A public link to the first frame instead of the file; `start_image_url` is read too."
+            },
+            {
+              "name": "end_image",
+              "type": "file",
+              "required": false,
+              "desc": "An optional last frame; a file sent as `end_image_url` is read too."
+            },
+            {
+              "name": "end_image_url",
+              "type": "url",
+              "required": false,
+              "desc": "A public link to the last frame instead of the file."
+            },
+            {
+              "name": "prompt",
+              "type": "string",
+              "required": false,
+              "desc": "What happens in the clip. `raw_prompt`, when sent, is used as written instead."
+            },
+            {
+              "name": "duration",
+              "type": "integer",
+              "required": false,
+              "desc": "Seconds: 10 or 15. Default 10.",
+              "values": [
+                "10",
+                "15"
+              ]
+            },
+            {
+              "name": "camera_movement",
+              "type": "string",
+              "required": false,
+              "desc": "The camera move, as `dolly_in` or `dolly-in`."
+            },
+            {
+              "name": "motion",
+              "type": "string",
+              "required": false,
+              "desc": "How much moves in the scene."
+            }
+          ],
+          "answers": [
+            {
+              "status": 200,
+              "label": "Started: poll `GET /v1/status/{id}` with the id",
+              "body": {
+                "status": "success",
+                "id": "218831",
+                "cost": 30,
+                "credits": 4970
+              }
+            },
+            {
+              "status": 400,
+              "label": "Refused: nothing was charged",
+              "body": {
+                "status": "error",
+                "code": "NO_CREDITS",
+                "message": "Not enough credits for this generation."
+              }
+            }
+          ],
           "videoModel": "v2.0-flash"
         },
         "tags": [
@@ -4513,14 +6362,90 @@
     "/v1/video-v20-cinematic": {
       "post": {
         "operationId": "legacyV1VideoV20Cinematic",
-        "summary": "Legacy alias of /v1/videos. The same engine. A 20 s request is 15 s, as before. Needs an account that has paid.",
+        "summary": "Legacy alias of /v2/videos. The same engine. A 20 s request is 15 s, as before. Needs an account that has paid: a top-up, or a balance moved from mnmlai.dev.",
         "deprecated": true,
         "x-mnml-legacy": {
           "kind": "video",
-          "successor": "/v1/videos",
+          "successor": "/v2/videos",
           "legacyCredits": "2 per second",
           "paidOnly": true,
           "note": "The same engine. A 20 s request is 15 s, as before.",
+          "idKey": "id",
+          "fields": [
+            {
+              "name": "image",
+              "type": "file",
+              "required": false,
+              "desc": "The first frame, as a file or as a link in the same field. Or `image_url`."
+            },
+            {
+              "name": "image_url",
+              "type": "url",
+              "required": false,
+              "desc": "A public link to the first frame instead of the file; `start_image_url` is read too."
+            },
+            {
+              "name": "end_image",
+              "type": "file",
+              "required": false,
+              "desc": "An optional last frame; a file sent as `end_image_url` is read too."
+            },
+            {
+              "name": "end_image_url",
+              "type": "url",
+              "required": false,
+              "desc": "A public link to the last frame instead of the file."
+            },
+            {
+              "name": "prompt",
+              "type": "string",
+              "required": false,
+              "desc": "What happens in the clip. `raw_prompt`, when sent, is used as written instead."
+            },
+            {
+              "name": "duration",
+              "type": "integer",
+              "required": false,
+              "desc": "Seconds: 10 or 15 (20 is read as 15). Default 10.",
+              "values": [
+                "10",
+                "15"
+              ]
+            },
+            {
+              "name": "camera_movement",
+              "type": "string",
+              "required": false,
+              "desc": "The camera move, as `dolly_in` or `dolly-in`."
+            },
+            {
+              "name": "motion",
+              "type": "string",
+              "required": false,
+              "desc": "How much moves in the scene."
+            }
+          ],
+          "answers": [
+            {
+              "status": 200,
+              "label": "Started: poll `GET /v1/status/{id}` with the id",
+              "body": {
+                "status": "success",
+                "id": "218831",
+                "cost": 30,
+                "credits": 4970
+              }
+            },
+            {
+              "status": 400,
+              "label": "Refused: nothing was charged",
+              "body": {
+                "status": "error",
+                "code": "NO_CREDITS",
+                "message": "Not enough credits for this generation."
+              }
+            }
+          ],
           "videoModel": "v2.0"
         },
         "tags": [
@@ -4589,14 +6514,80 @@
     "/v1/video-ai": {
       "post": {
         "operationId": "legacyV1VideoAi",
-        "summary": "Legacy alias of /v1/videos. Runs on v1.1, its fixed length. Needs an account that has paid.",
+        "summary": "Legacy alias of /v2/videos. Runs on v1.1, its fixed length. Needs an account that has paid: a top-up, or a balance moved from mnmlai.dev.",
         "deprecated": true,
         "x-mnml-legacy": {
           "kind": "video",
-          "successor": "/v1/videos",
+          "successor": "/v2/videos",
           "legacyCredits": "10",
           "paidOnly": true,
           "note": "Runs on v1.1, its fixed length.",
+          "idKey": "id",
+          "fields": [
+            {
+              "name": "image",
+              "type": "file",
+              "required": false,
+              "desc": "The first frame, as a file or as a link in the same field. Or `image_url`."
+            },
+            {
+              "name": "image_url",
+              "type": "url",
+              "required": false,
+              "desc": "A public link to the first frame instead of the file; `start_image_url` is read too."
+            },
+            {
+              "name": "end_image",
+              "type": "file",
+              "required": false,
+              "desc": "An optional last frame; a file sent as `end_image_url` is read too."
+            },
+            {
+              "name": "end_image_url",
+              "type": "url",
+              "required": false,
+              "desc": "A public link to the last frame instead of the file."
+            },
+            {
+              "name": "prompt",
+              "type": "string",
+              "required": false,
+              "desc": "What happens in the clip; `raw_prompt` is read too."
+            },
+            {
+              "name": "camera_movement",
+              "type": "string",
+              "required": false,
+              "desc": "The camera move, as `dolly_in` or `dolly-in`."
+            },
+            {
+              "name": "motion",
+              "type": "string",
+              "required": false,
+              "desc": "How much moves in the scene."
+            }
+          ],
+          "answers": [
+            {
+              "status": 200,
+              "label": "Started: poll `GET /v1/status/{id}` with the id",
+              "body": {
+                "status": "success",
+                "id": "218831",
+                "cost": 30,
+                "credits": 4970
+              }
+            },
+            {
+              "status": 400,
+              "label": "Refused: nothing was charged",
+              "body": {
+                "status": "error",
+                "code": "NO_CREDITS",
+                "message": "Not enough credits for this generation."
+              }
+            }
+          ],
           "videoModel": "v1.1"
         },
         "tags": [
@@ -4665,14 +6656,27 @@
     "/v1/virtual-staging-ai": {
       "post": {
         "operationId": "legacyV1VirtualStagingAi",
-        "summary": "Legacy alias of /v1/renders. Retired: it answered with the image inline. Use `/v2/virtual-staging-ai`, or `/v1/renders` with `mode: interior`.",
+        "summary": "Legacy alias of /v2/renders. Retired: it answered with the image inline. Use the legacy `POST /v2/virtual-staging-ai`, which answers with a job id to poll, or `POST /v2/renders` with `mode: interior`.",
         "deprecated": true,
         "x-mnml-legacy": {
           "kind": "retired",
-          "successor": "/v1/renders",
+          "successor": "/v2/renders",
           "legacyCredits": "2",
           "paidOnly": false,
-          "note": "Retired: it answered with the image inline. Use `/v2/virtual-staging-ai`, or `/v1/renders` with `mode: interior`."
+          "note": "Retired: it answered with the image inline. Use the legacy `POST /v2/virtual-staging-ai`, which answers with a job id to poll, or `POST /v2/renders` with `mode: interior`.",
+          "idKey": "id",
+          "fields": [],
+          "answers": [
+            {
+              "status": 410,
+              "label": "Retired",
+              "body": {
+                "status": "error",
+                "code": "ENDPOINT_RETIRED",
+                "message": "Retired: it answered with the image inline. Use the legacy `POST /v2/virtual-staging-ai`, which answers with a job id to poll, or `POST /v2/renders` with `mode: interior`."
+              }
+            }
+          ]
         },
         "tags": [
           "Legacy"
@@ -4682,7 +6686,7 @@
             "$ref": "#/components/responses/Unauthenticated"
           },
           "410": {
-            "description": "Retired: it answered with the image inline. Use `/v2/virtual-staging-ai`, or `/v1/renders` with `mode: interior`.",
+            "description": "Retired: it answered with the image inline. Use the legacy `POST /v2/virtual-staging-ai`, which answers with a job id to poll, or `POST /v2/renders` with `mode: interior`.",
             "headers": {
               "X-Request-Id": {
                 "$ref": "#/components/headers/RequestId"
@@ -4721,14 +6725,27 @@
     "/v1/prompt-generator": {
       "post": {
         "operationId": "legacyV1PromptGenerator",
-        "summary": "Legacy alias of /v1/renders. Retired: there is no v4 equivalent yet.",
+        "summary": "Legacy alias of /v2/renders. Retired: there is no v4 equivalent yet.",
         "deprecated": true,
         "x-mnml-legacy": {
           "kind": "retired",
-          "successor": "/v1/renders",
+          "successor": "/v2/renders",
           "legacyCredits": "0.5",
           "paidOnly": false,
-          "note": "Retired: there is no v4 equivalent yet."
+          "note": "Retired: there is no v4 equivalent yet.",
+          "idKey": "id",
+          "fields": [],
+          "answers": [
+            {
+              "status": 410,
+              "label": "Retired",
+              "body": {
+                "status": "error",
+                "code": "ENDPOINT_RETIRED",
+                "message": "Retired: there is no v4 equivalent yet."
+              }
+            }
+          ]
         },
         "tags": [
           "Legacy"
@@ -4777,14 +6794,51 @@
     "/v1/status/{id}": {
       "get": {
         "operationId": "legacyV1StatusId",
-        "summary": "Legacy alias of /v1/jobs/{id}. The same answers. Only your own jobs are found.",
+        "summary": "Legacy alias of /v2/jobs/{id}. The same answers. Only your own jobs are found.",
         "deprecated": true,
         "x-mnml-legacy": {
           "kind": "status",
-          "successor": "/v1/jobs/{id}",
+          "successor": "/v2/jobs/{id}",
           "legacyCredits": "0",
           "paidOnly": false,
-          "note": "The same answers. Only your own jobs are found."
+          "note": "The same answers. Only your own jobs are found.",
+          "idKey": "id",
+          "fields": [],
+          "answers": [
+            {
+              "status": 200,
+              "label": "Still running",
+              "body": {
+                "status": "processing"
+              }
+            },
+            {
+              "status": 200,
+              "label": "Done: `message` lists the outputs, each a signed link that expires",
+              "body": {
+                "status": "success",
+                "message": [
+                  "https://api.mnml.ai/v2/files/218831?exp=…&sig=…"
+                ]
+              }
+            },
+            {
+              "status": 500,
+              "label": "Failed: the charge was refunded",
+              "body": {
+                "status": "failed",
+                "message": "Job Failed"
+              }
+            },
+            {
+              "status": 400,
+              "label": "Canceled",
+              "body": {
+                "status": "canceled",
+                "message": "Job canceled. Try again later."
+              }
+            }
+          ]
         },
         "tags": [
           "Legacy"
@@ -4844,14 +6898,51 @@
     "/v2/status/{id}": {
       "get": {
         "operationId": "legacyV2StatusId",
-        "summary": "Legacy alias of /v1/jobs/{id}. The same answers. Only your own jobs are found.",
+        "summary": "Legacy alias of /v2/jobs/{id}. The same answers. Only your own jobs are found.",
         "deprecated": true,
         "x-mnml-legacy": {
           "kind": "status",
-          "successor": "/v1/jobs/{id}",
+          "successor": "/v2/jobs/{id}",
           "legacyCredits": "0",
           "paidOnly": false,
-          "note": "The same answers. Only your own jobs are found."
+          "note": "The same answers. Only your own jobs are found.",
+          "idKey": "id",
+          "fields": [],
+          "answers": [
+            {
+              "status": 200,
+              "label": "Still running",
+              "body": {
+                "status": "processing"
+              }
+            },
+            {
+              "status": 200,
+              "label": "Done: `message` lists the outputs, each a signed link that expires",
+              "body": {
+                "status": "success",
+                "message": [
+                  "https://api.mnml.ai/v2/files/218831?exp=…&sig=…"
+                ]
+              }
+            },
+            {
+              "status": 500,
+              "label": "Failed: the charge was refunded",
+              "body": {
+                "status": "failed",
+                "message": "Job Failed"
+              }
+            },
+            {
+              "status": 400,
+              "label": "Canceled",
+              "body": {
+                "status": "canceled",
+                "message": "Job canceled. Try again later."
+              }
+            }
+          ]
         },
         "tags": [
           "Legacy"
@@ -4911,14 +7002,26 @@
     "/v1/credits": {
       "get": {
         "operationId": "legacyV1Credits",
-        "summary": "Legacy alias of /v1/account. Your mnml.ai balance, in v4 credits.",
+        "summary": "Legacy alias of /v2/account. Your mnml.ai balance, in v4 credits.",
         "deprecated": true,
         "x-mnml-legacy": {
           "kind": "credits",
-          "successor": "/v1/account",
+          "successor": "/v2/account",
           "legacyCredits": "0",
           "paidOnly": false,
-          "note": "Your mnml.ai balance, in v4 credits."
+          "note": "Your mnml.ai balance, in v4 credits.",
+          "idKey": "id",
+          "fields": [],
+          "answers": [
+            {
+              "status": 200,
+              "label": "Your API wallet, in credits",
+              "body": {
+                "status": "success",
+                "credits": 4970
+              }
+            }
+          ]
         },
         "tags": [
           "Legacy"

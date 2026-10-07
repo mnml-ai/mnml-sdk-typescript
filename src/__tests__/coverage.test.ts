@@ -24,7 +24,6 @@ import type {
   Mode,
   ReferenceMode,
   RenderStarted,
-  Upload,
   VideoModel,
   VideoPrice,
 } from '../types.js';
@@ -88,12 +87,12 @@ const members = <T extends string>(record: Record<T, 1>) => Object.keys(record).
 const COVERED: Record<string, string> = {
   getAccount: 'account.get',
   listEngines: 'engines.list',
-  createUpload: 'uploads.create',
   createRender: 'renders.create',
   createEdit: 'edits.create',
   createEnhancement: 'enhancements.create',
   createVideo: 'videos.create',
   getJob: 'jobs.get',
+  streamJob: 'jobs.stream',
   cancelJob: 'jobs.cancel',
 };
 /** Not client calls: the spec itself, and the signed output link a job hands back. */
@@ -111,7 +110,6 @@ describe('the SDK covers the spec', () => {
         prompt: 1,
         engine: 1,
         mode: 1,
-        upload_id: 1,
         image: 1,
         image_url: 1,
         job_id: 1,
@@ -127,7 +125,6 @@ describe('the SDK covers the spec', () => {
       keys<CreateEdit>({
         kind: 1,
         prompt: 1,
-        upload_id: 1,
         image: 1,
         image_url: 1,
         job_id: 1,
@@ -136,14 +133,12 @@ describe('the SDK covers the spec', () => {
         references: 1,
         region: 1,
         mask: 1,
-        mask_upload_id: 1,
         webhook_url: 1,
       }),
     ).toEqual(bodyKeys('createEdit'));
     expect(
       keys<CreateEnhancement>({
         kind: 1,
-        upload_id: 1,
         image: 1,
         image_url: 1,
         job_id: 1,
@@ -155,7 +150,6 @@ describe('the SDK covers the spec', () => {
     ).toEqual(bodyKeys('createEnhancement'));
     expect(
       keys<CreateVideo>({
-        upload_id: 1,
         image: 1,
         image_url: 1,
         job_id: 1,
@@ -205,9 +199,6 @@ describe('the SDK covers the spec', () => {
     expect(keys<JobCanceled>({ id: 1, outcome: 1, credits_refunded: 1 })).toEqual(
       dataKeys('cancelJob'),
     );
-    expect(
-      keys<Upload>({ id: 1, width: 1, height: 1, size_bytes: 1, purpose: 1, created_at: 1 }),
-    ).toEqual(dataKeys('createUpload'));
     expect(
       keys<Account>({ id: 1, email: 1, name: 1, tier: 1, credits: 1, key: 1, limits: 1 }),
     ).toEqual(dataKeys('getAccount'));

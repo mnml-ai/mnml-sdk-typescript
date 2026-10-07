@@ -2,7 +2,7 @@
 // The coverage test then says which types need to change.
 import { writeFile } from 'node:fs/promises';
 
-const url = process.env.MNML_OPENAPI_URL ?? 'https://api.mnml.ai/v1/openapi.json';
+const url = process.env.MNML_OPENAPI_URL ?? 'https://api.mnml.ai/v2/openapi.json';
 const res = await fetch(url);
 if (!res.ok) throw new Error(`${url} answered ${res.status}`);
 const spec = await res.json();

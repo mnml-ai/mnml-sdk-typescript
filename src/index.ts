@@ -6,7 +6,6 @@ export type {
   ReadOptions,
   RenderOptions,
   RequestOptions,
-  UploadInput,
   WaitOptions,
 } from './client.js';
 export { MnmlError, MnmlTimeoutError } from './errors.js';

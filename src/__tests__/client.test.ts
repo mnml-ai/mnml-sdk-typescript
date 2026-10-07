@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Mnml, MnmlError, MnmlTimeoutError } from '../index.js';
 
-/* The client against a fake API: envelope, retries, idempotency, polling, uploads. */
+/* The client against a fake API: envelope, retries, idempotency, polling. */
 
 type Call = { url: string; init: RequestInit };
 
@@ -57,7 +57,7 @@ describe('Mnml', () => {
     });
     expect(started.credits_charged).toBe(25);
     const [call] = f.calls;
-    expect(call!.url).toBe('https://api.mnml.ai/v1/renders');
+    expect(call!.url).toBe('https://api.mnml.ai/v2/renders');
     expect(header(call!, 'authorization')).toBe('Bearer mk_live_x');
     expect(JSON.parse(call!.init.body as string)).toEqual({
       prompt: 'Timber facade',
@@ -207,7 +207,7 @@ describe('Mnml', () => {
     await vi.advanceTimersByTimeAsync(2000);
     await expect(p).resolves.toMatchObject({ status: 'succeeded' });
     expect(f.calls.map((c) => c.url)).toEqual(
-      Array(3).fill('https://api.mnml.ai/v1/jobs/9?wait=90'),
+      Array(3).fill('https://api.mnml.ai/v2/jobs/9?wait=90'),
     );
   });
 
@@ -219,9 +219,9 @@ describe('Mnml', () => {
     ]);
     const mnml = new Mnml({ apiKey: 'k', fetch: f.impl });
     await mnml.jobs.wait('9', { intervalMs: 0, timeoutMs: 30_500 });
-    expect(f.calls[0]!.url).toBe('https://api.mnml.ai/v1/jobs/9?wait=30');
+    expect(f.calls[0]!.url).toBe('https://api.mnml.ai/v2/jobs/9?wait=30');
     await mnml.jobs.get('9');
-    expect(f.calls[2]!.url).toBe('https://api.mnml.ai/v1/jobs/9');
+    expect(f.calls[2]!.url).toBe('https://api.mnml.ai/v2/jobs/9');
   });
 
   it('stops waiting at the deadline, leaving the job running', async () => {
@@ -232,28 +232,11 @@ describe('Mnml', () => {
     );
   });
 
-  it('uploads a file as multipart, or a URL as JSON', async () => {
-    const uploaded = {
-      id: 'u1',
-      width: 1,
-      height: 1,
-      size_bytes: 3,
-      purpose: 'image',
-      created_at: 'x',
-    };
-    const f = fakeFetch([ok(uploaded, 201), ok(uploaded, 201)]);
+  it('calls /v2 under a custom base URL, whatever its trailing slash', async () => {
+    const f = fakeFetch([ok({ id: 'u1' })]);
     const mnml = new Mnml({ apiKey: 'k', fetch: f.impl, baseUrl: 'https://api.example.com/' });
-    await mnml.uploads.create({
-      file: new Uint8Array([1, 2, 3]),
-      filename: 'a.png',
-      purpose: 'mask',
-    });
-    const form = f.calls[0]!.init.body as FormData;
-    expect(form.get('purpose')).toBe('mask');
-    expect((form.get('file') as File).name).toBe('a.png');
-    expect(f.calls[0]!.url).toBe('https://api.example.com/v1/uploads');
-    await mnml.uploads.create({ url: 'https://e.com/a.png' });
-    expect(JSON.parse(f.calls[1]!.init.body as string)).toEqual({ url: 'https://e.com/a.png' });
+    await mnml.account.get();
+    expect(f.calls[0]!.url).toBe('https://api.example.com/v2/account');
   });
 
   it('starts a render and waits for every job its count started', async () => {
@@ -311,9 +294,9 @@ describe('Mnml', () => {
     const jobs = await mnml.renders.createAndWait({ prompt: 'x' });
     expect(jobs).toEqual([done]);
     expect(f.calls).toHaveLength(1);
-    expect(f.calls[0]!.url).toBe('https://api.mnml.ai/v1/renders?wait=90');
+    expect(f.calls[0]!.url).toBe('https://api.mnml.ai/v2/renders?wait=90');
     await mnml.renders.create({ prompt: 'x' }, { wait: 30 });
-    expect(f.calls[1]!.url).toBe('https://api.mnml.ai/v1/renders?wait=30');
+    expect(f.calls[1]!.url).toBe('https://api.mnml.ai/v2/renders?wait=30');
   });
 
   it('starts an edit and returns the settled job', async () => {
@@ -326,7 +309,7 @@ describe('Mnml', () => {
       prompt: 'Dark brick',
     });
     expect(job).toMatchObject({ id: '5', status: 'failed' });
-    expect(f.calls[1]!.url).toBe('https://api.mnml.ai/v1/jobs/5?wait=90');
+    expect(f.calls[1]!.url).toBe('https://api.mnml.ai/v2/jobs/5?wait=90');
   });
 
   it('downloads an output without sending the key', async () => {
@@ -337,7 +320,7 @@ describe('Mnml', () => {
       }),
     ]);
     const mnml = new Mnml({ apiKey: 'mk_live_x', fetch: f.impl });
-    const url = 'https://api.mnml.ai/v1/files/9?exp=1&sig=abc';
+    const url = 'https://api.mnml.ai/v2/files/9?exp=1&sig=abc';
     const file = await mnml.files.download({ url, media: 'image', expires_at: 'x' });
     expect([...file.data]).toEqual([137, 80, 78, 71]);
     expect(file.contentType).toBe('image/png');
@@ -349,10 +332,109 @@ describe('Mnml', () => {
     const f = fakeFetch([fail(404, 'NOT_FOUND')]);
     const mnml = new Mnml({ apiKey: 'k', fetch: f.impl });
     await expect(
-      mnml.files.download('https://api.mnml.ai/v1/files/9?exp=1&sig=x'),
+      mnml.files.download('https://api.mnml.ai/v2/files/9?exp=1&sig=x'),
     ).rejects.toMatchObject({
       code: 'NOT_FOUND',
       status: 404,
     });
+  });
+});
+
+describe('jobs.stream', () => {
+  /** An SSE answer whose body arrives in the given chunks, as a network would split it. */
+  const sse = (chunks: string[], status = 200) => {
+    const encoder = new TextEncoder();
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const c of chunks) controller.enqueue(encoder.encode(c));
+        controller.close();
+      },
+    });
+    return new Response(body, {
+      status,
+      headers: { 'content-type': 'text/event-stream', 'x-request-id': 'req_3' },
+    });
+  };
+  const job = (status: string) => ({ id: '9', status, outputs: [] });
+  const collect = async <T>(it: AsyncIterable<T>) => {
+    const out: T[] = [];
+    for await (const e of it) out.push(e);
+    return out;
+  };
+
+  it('yields the job as it changes, then done, across split chunks, pings and CRLF', async () => {
+    const f = fakeFetch([
+      sse([
+        `event: job\ndata: ${JSON.stringify(job('queued'))}\n\n: ping\n\n`,
+        `event: job\r\ndata: ${JSON.stringify(job('processing')).slice(0, 12)}`,
+        `${JSON.stringify(job('processing')).slice(12)}\r\n\r\n`,
+        `event: done\ndata: ${JSON.stringify(job('succeeded'))}\n\n`,
+      ]),
+    ]);
+    const mnml = new Mnml({ apiKey: 'k', fetch: f.impl });
+    const events = await collect(mnml.jobs.stream('9'));
+    expect(events.map((e) => [e.type, e.type === 'error' ? null : e.job.status])).toEqual([
+      ['job', 'queued'],
+      ['job', 'processing'],
+      ['done', 'succeeded'],
+    ]);
+    expect(f.calls[0]!.url).toBe('https://api.mnml.ai/v2/jobs/9/events');
+    expect(header(f.calls[0]!, 'accept')).toBe('text/event-stream');
+  });
+
+  it('ends at once on a job already settled, and on an error event', async () => {
+    const f = fakeFetch([
+      sse([`event: done\ndata: ${JSON.stringify(job('failed'))}\n\n`]),
+      sse([
+        `event: job\ndata: ${JSON.stringify(job('processing'))}\n\n`,
+        'event: error\ndata: {"code":"READ_FAILED","message":"Try again."}\n\n',
+      ]),
+    ]);
+    const mnml = new Mnml({ apiKey: 'k', fetch: f.impl });
+    expect((await collect(mnml.jobs.stream('9'))).map((e) => e.type)).toEqual(['done']);
+    const events = await collect(mnml.jobs.stream('9'));
+    expect(events.at(-1)).toEqual({
+      type: 'error',
+      error: { code: 'READ_FAILED', message: 'Try again.' },
+    });
+  });
+
+  it('throws the refusal before the stream starts, and STREAM_ENDED when it is cut short', async () => {
+    const f = fakeFetch([
+      fail(404, 'NOT_FOUND'),
+      sse([`event: job\ndata: ${JSON.stringify(job('processing'))}\n\n`]),
+    ]);
+    const mnml = new Mnml({ apiKey: 'k', fetch: f.impl, maxRetries: 0 });
+    await expect(collect(mnml.jobs.stream('9'))).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(collect(mnml.jobs.stream('9'))).rejects.toMatchObject({ code: 'STREAM_ENDED' });
+  });
+
+  it('hangs up when the caller aborts', async () => {
+    const encoder = new TextEncoder();
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(
+          encoder.encode(`event: job\ndata: ${JSON.stringify(job('processing'))}\n\n`),
+        );
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const f = fakeFetch([new Response(body, { status: 200 })]);
+    const mnml = new Mnml({ apiKey: 'k', fetch: f.impl });
+    const controller = new AbortController();
+    const seen: string[] = [];
+    await expect(
+      (async () => {
+        for await (const e of mnml.jobs.stream('9', { signal: controller.signal })) {
+          seen.push(e.type);
+          controller.abort(new Error('stop'));
+        }
+      })(),
+    ).rejects.toThrow('stop');
+    expect(seen).toEqual(['job']);
+    expect(cancelled).toBe(true);
   });
 });

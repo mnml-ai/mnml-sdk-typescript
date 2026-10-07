@@ -9,10 +9,10 @@ import type {
   Engines,
   Job,
   JobCanceled,
+  JobStreamEvent,
   JobOutput,
   JobStarted,
   RenderStarted,
-  Upload,
 } from './types.js';
 
 export const VERSION = '0.1.0';
@@ -76,10 +76,6 @@ export interface DownloadedFile {
 
 /** `create` and then `jobs.wait`: the idempotency key for the create, the wait's own options. */
 export type CreateAndWaitOptions = Pick<RequestOptions, 'idempotencyKey'> & WaitOptions;
-
-export type UploadInput =
-  | { file: Blob | ArrayBuffer | Uint8Array; filename?: string; purpose?: 'image' | 'mask' }
-  | { url: string; purpose?: 'image' | 'mask' };
 
 const RETRYABLE = new Set([429, 500, 502, 503, 504]);
 /** A longer `Retry-After` (a daily limit runs to midnight UTC) is the caller's to handle. */
@@ -185,7 +181,7 @@ export class Mnml {
       const { wait, ...rest } = opts;
       return this.request<RenderStarted>(
         'POST',
-        wait ? `/v1/renders?wait=${wait}` : '/v1/renders',
+        wait ? `/v2/renders?wait=${wait}` : '/v2/renders',
         {
           json: await encodeImages(body),
           ...rest,
@@ -215,7 +211,7 @@ export class Mnml {
   /** Prompt edits and erasing, over the whole image or a region. */
   readonly edits = {
     create: async (body: CreateEdit, opts?: RequestOptions) =>
-      this.request<JobStarted>('POST', '/v1/edits', { json: await encodeImages(body), ...opts }),
+      this.request<JobStarted>('POST', '/v2/edits', { json: await encodeImages(body), ...opts }),
     createAndWait: async (body: CreateEdit, opts: CreateAndWaitOptions = {}): Promise<Job> =>
       this.jobs.wait((await this.edits.create(body, startOptions(opts))).id, opts),
   };
@@ -223,7 +219,7 @@ export class Mnml {
   /** Upscale, enhance, background removal and outpainting. */
   readonly enhancements = {
     create: async (body: CreateEnhancement, opts?: RequestOptions) =>
-      this.request<JobStarted>('POST', '/v1/enhancements', {
+      this.request<JobStarted>('POST', '/v2/enhancements', {
         json: await encodeImages(body),
         ...opts,
       }),
@@ -234,7 +230,7 @@ export class Mnml {
   /** Video from a still image. A clip takes minutes: wait with a longer `intervalMs`. */
   readonly videos = {
     create: async (body: CreateVideo, opts?: RequestOptions) =>
-      this.request<JobStarted>('POST', '/v1/videos', { json: await encodeImages(body), ...opts }),
+      this.request<JobStarted>('POST', '/v2/videos', { json: await encodeImages(body), ...opts }),
     createAndWait: async (body: CreateVideo, opts: CreateAndWaitOptions = {}): Promise<Job> =>
       this.jobs.wait((await this.videos.create(body, startOptions(opts))).id, {
         intervalMs: 10_000,
@@ -243,36 +239,34 @@ export class Mnml {
       }),
   };
 
-  /**
-   * Upload an image (or have the API fetch a public URL) to use in several
-   * calls by `upload_id`. Optional: every create call takes its `image` inline.
-   */
-  readonly uploads = {
-    create: (input: UploadInput, opts?: RequestOptions) => {
-      if ('url' in input) {
-        return this.request<Upload>('POST', '/v1/uploads', { json: input, ...opts });
-      }
-      const form = new FormData();
-      const blob = input.file instanceof Blob ? input.file : new Blob([input.file as BlobPart]);
-      form.set('file', blob, input.filename ?? 'image');
-      if (input.purpose) form.set('purpose', input.purpose);
-      return this.request<Upload>('POST', '/v1/uploads', { form, ...opts });
-    },
-  };
-
   readonly jobs = {
     get: (id: string, opts: ReadOptions = {}) => {
       const { wait, signal } = opts;
-      const path = `/v1/jobs/${encodeURIComponent(id)}`;
+      const path = `/v2/jobs/${encodeURIComponent(id)}`;
       return this.request<Job>('GET', wait ? `${path}?wait=${wait}` : path, {
         ...(signal ? { signal } : {}),
         // A held answer must not trip the client's own timeout.
         ...(wait ? { timeoutMs: this.timeoutMs + wait * 1000 } : {}),
       });
     },
+    /**
+     * Follows a job as it runs, over one connection (Server-Sent Events): each
+     * change of the job, then one last event (`done`, `timeout` or `error`),
+     * after which the iteration ends. For a job that outlasts a held read, in
+     * a script with no server to take a webhook. Stopping the loop, or the
+     * signal, hangs up; the job keeps running.
+     *
+     * ```ts
+     * for await (const event of mnml.jobs.stream(id)) {
+     *   if (event.type === 'done') console.log(event.job.outputs[0]?.url);
+     * }
+     * ```
+     */
+    stream: (id: string, opts: { signal?: AbortSignal } = {}): AsyncGenerator<JobStreamEvent> =>
+      this.streamEvents(`/v2/jobs/${encodeURIComponent(id)}/events`, opts.signal),
     /** Cancels a job; one cancelled before it produced anything is refunded. */
     cancel: (id: string, opts?: RequestOptions) =>
-      this.request<JobCanceled>('POST', `/v1/jobs/${encodeURIComponent(id)}/cancel`, opts),
+      this.request<JobCanceled>('POST', `/v2/jobs/${encodeURIComponent(id)}/cancel`, opts),
     /**
      * Reads the job until it succeeds, fails or is cancelled, and returns it.
      * Each read asks the API to hold it until the job settles, so a render
@@ -325,12 +319,12 @@ export class Mnml {
 
   /** The key's account: balance, tier and limits. */
   readonly account = {
-    get: (opts?: RequestOptions) => this.request<Account>('GET', '/v1/account', opts),
+    get: (opts?: RequestOptions) => this.request<Account>('GET', '/v2/account', opts),
   };
 
   /** The engines and video models, with their prices and capabilities. */
   readonly engines = {
-    list: (opts?: RequestOptions) => this.request<Engines>('GET', '/v1/engines', opts),
+    list: (opts?: RequestOptions) => this.request<Engines>('GET', '/v2/engines', opts),
   };
 
   /** Headers every call carries, the key aside. */
@@ -367,6 +361,59 @@ export class Mnml {
     const json = (await res.json().catch(() => null)) as Envelope<T> | null;
     if (res.ok && json?.success) return json.data as T;
     throw errorFrom(res, json);
+  }
+
+  /**
+   * A Server-Sent Events answer as events, until its last one. The stream is
+   * opened with the client's retries (a 429 or 5xx before it starts); a
+   * refusal throws `MnmlError`, and a connection that ends before the last
+   * event throws `MnmlError` with `STREAM_ENDED`.
+   */
+  private async *streamEvents(path: string, signal?: AbortSignal): AsyncGenerator<JobStreamEvent> {
+    const res = await this.send(
+      `${this.baseUrl}${path}`,
+      {
+        method: 'GET',
+        headers: {
+          ...this.baseHeaders(),
+          authorization: `Bearer ${this.apiKey}`,
+          accept: 'text/event-stream',
+        },
+      },
+      signal,
+    );
+    if (!res.ok || !res.body) throw errorFrom(res, await res.json().catch(() => null));
+    const reader = res.body.getReader();
+    // `send` lets go of the caller's signal once the answer starts: hang up on it here.
+    const hangUp = () => void reader.cancel(signal?.reason).catch(() => undefined);
+    signal?.addEventListener('abort', hangUp, { once: true });
+    const decoder = new TextDecoder();
+    let buffer = '';
+    try {
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true }).replace(/\r\n?/g, '\n');
+        let end: number;
+        while ((end = buffer.indexOf('\n\n')) >= 0) {
+          const event = parseEvent(buffer.slice(0, end));
+          buffer = buffer.slice(end + 2);
+          if (!event) continue;
+          yield event;
+          if (event.type !== 'job') return;
+        }
+      }
+      if (signal?.aborted) throw signal.reason;
+      throw new MnmlError(
+        'STREAM_ENDED',
+        'The job stream ended before the job settled. Read the job, or open the stream again.',
+        res.status,
+        res.headers.get('x-request-id'),
+      );
+    } finally {
+      signal?.removeEventListener('abort', hangUp);
+      await reader.cancel().catch(() => undefined);
+    }
   }
 
   /**
@@ -412,6 +459,27 @@ function startOptions(opts: CreateAndWaitOptions): RequestOptions {
     ...(opts.idempotencyKey !== undefined ? { idempotencyKey: opts.idempotencyKey } : {}),
     ...(opts.signal ? { signal: opts.signal } : {}),
   };
+}
+
+/** One Server-Sent Events block as a `JobStreamEvent`; null for a comment (`: ping`) or an unknown event. */
+function parseEvent(block: string): JobStreamEvent | null {
+  let type = 'message';
+  const data: string[] = [];
+  for (const line of block.split('\n')) {
+    if (line.startsWith(':')) continue;
+    const colon = line.indexOf(':');
+    const field = colon < 0 ? line : line.slice(0, colon);
+    const value = colon < 0 ? '' : line.slice(colon + 1).replace(/^ /, '');
+    if (field === 'event') type = value;
+    else if (field === 'data') data.push(value);
+  }
+  if (data.length === 0) return null;
+  const payload = JSON.parse(data.join('\n')) as unknown;
+  if (type === 'job' || type === 'done' || type === 'timeout') {
+    return { type, job: payload as Job };
+  }
+  if (type === 'error') return { type, error: payload as { code: string; message: string } };
+  return null;
 }
 
 /** The API's answer envelope: `data` on a success, `error` on a refusal. */
