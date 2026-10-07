@@ -4,7 +4,7 @@ The official TypeScript and JavaScript client for the [mnml API](https://develop
 architecture renders, edits, enhancements and video, from your own product.
 
 - Typed requests and answers, checked against the API's OpenAPI document
-- Every endpoint of API v1: renders, edits, enhancements, video, uploads, jobs, account, engines
+- Every endpoint of API v2: renders, edits, enhancements, video, jobs, account, engines
 - Retries, timeouts and idempotency keys handled for you
 - `createAndWait()` and `jobs.wait()` to poll a job until it settles, `files.download()` to keep
   its output
@@ -52,18 +52,17 @@ site's origins on the [API keys](https://developers.mnml.ai/console/keys) page.
 
 | Method                                 | Endpoint                    | What it does                                        |
 | -------------------------------------- | --------------------------- | --------------------------------------------------- |
-| `renders.create(body)`                 | `POST /v1/renders`          | Render from an image, or from a prompt alone        |
-| `edits.create(body)`                   | `POST /v1/edits`            | Edit or erase, over the whole image or a region     |
-| `enhancements.create(body)`            | `POST /v1/enhancements`     | Upscale, enhance, remove the background, outpaint   |
-| `videos.create(body)`                  | `POST /v1/videos`           | Video from a still                                  |
-| `uploads.create(input)`                | `POST /v1/uploads`          | Optional: one image reused across calls             |
-| `jobs.get(id)`                         | `GET /v1/jobs/{id}`         | Read a job                                          |
-| `jobs.cancel(id)`                      | `POST /v1/jobs/{id}/cancel` | Cancel a job (refunded if it had not produced yet)  |
-| `account.get()`                        | `GET /v1/account`           | Balance, tier and limits for this key               |
-| `engines.list()`                       | `GET /v1/engines`           | Engines, video models, prices and capabilities      |
-| `files.download(output)`               | `GET /v1/files/{id}`        | A job output's bytes, from its signed link          |
-| `jobs.wait(id, options?)`              | `GET /v1/jobs/{id}`         | Read a job until it succeeds, fails or is cancelled |
-| `jobs.waitAll(ids, options?)`          | `GET /v1/jobs/{id}`         | `wait` for several jobs at once                     |
+| `renders.create(body)`                 | `POST /v2/renders`          | Render from an image, or from a prompt alone        |
+| `edits.create(body)`                   | `POST /v2/edits`            | Edit or erase, over the whole image or a region     |
+| `enhancements.create(body)`            | `POST /v2/enhancements`     | Upscale, enhance, remove the background, outpaint   |
+| `videos.create(body)`                  | `POST /v2/videos`           | Video from a still                                  |
+| `jobs.get(id)`                         | `GET /v2/jobs/{id}`         | Read a job                                          |
+| `jobs.cancel(id)`                      | `POST /v2/jobs/{id}/cancel` | Cancel a job (refunded if it had not produced yet)  |
+| `account.get()`                        | `GET /v2/account`           | Balance, tier and limits for this key               |
+| `engines.list()`                       | `GET /v2/engines`           | Engines, video models, prices and capabilities      |
+| `files.download(output)`               | `GET /v2/files/{id}`        | A job output's bytes, from its signed link          |
+| `jobs.wait(id, options?)`              | `GET /v2/jobs/{id}`         | Read a job until it succeeds, fails or is cancelled |
+| `jobs.waitAll(ids, options?)`          | `GET /v2/jobs/{id}`         | `wait` for several jobs at once                     |
 | `<resource>.createAndWait(body, opt?)` | the create, then the job    | Start a job and wait for it (a render: every job)   |
 
 Every method returns the answer's `data`, and takes an optional last argument
@@ -109,21 +108,6 @@ await mnml.renders.create({
     { image: 'https://example.com/mood.jpg', mode: 'atmosphere' },
   ],
 });
-```
-
-### Uploads (optional)
-
-To use one image in many calls, upload it once and pass its `upload_id`:
-
-```ts
-const upload = await mnml.uploads.create({
-  file: await readFile('massing.png'),
-  filename: 'massing.png',
-});
-await mnml.renders.create({ upload_id: upload.id, prompt: 'Concrete and glass, overcast' });
-
-// Or have the API fetch a public image:
-await mnml.uploads.create({ url: 'https://example.com/massing.png' });
 ```
 
 ### Edits, enhancements and video
@@ -262,13 +246,13 @@ Request and answer types are exported: `CreateRender`, `Job`, `JobStatus`, `Acco
 API's OpenAPI document ([`spec/openapi.json`](./spec/openapi.json)), so the types cannot drift
 from the API.
 
-## Moving from the v3 API
+## Moving from the mnmlai.dev API
 
-The v3 routes (`/v1/archDiffusion-v46`, `/v1/upscale`, `/v1/status/{id}` …) still answer on
-`api.mnml.ai`, deprecated, so nothing breaks while you move. The SDK speaks API v1 only. Each
-old route has a v1 call that does the same job:
+The mnmlai.dev routes (`/v1/archDiffusion-v46`, `/v1/upscale`, `/v1/status/{id}` …) still answer
+at `/v1` on `api.mnml.ai` and on `api.mnmlai.dev`, deprecated, so nothing breaks while you move.
+The SDK speaks API v2 only. Each old route has a v2 call that does the same job:
 
-| v3 route                                                      | SDK call                                                      |
+| mnmlai.dev route                                              | SDK call                                                      |
 | ------------------------------------------------------------- | ------------------------------------------------------------- |
 | `archDiffusion-v46`                                           | `renders.create({ engine: 'v4.6-ultra', … })`                 |
 | `archDiffusion-v45`, `-v45-lite`                              | `renders.create({ engine: 'v4.5-ultra' })`, `'v4.5-fast'`     |
@@ -286,8 +270,8 @@ old route has a v1 call that does the same job:
 | `status/{id}` (v1 and v2)                                     | `jobs.get(id)` or `jobs.wait(id)`                             |
 | `credits`                                                     | `account.get()`                                               |
 
-v1 takes the image in the request too, as `image`: its bytes, a public link or base64. An
-`upload_id` (from `uploads.create`) or a finished `job_id` also works. The full guide is at
+v2 takes the image in the request too, as `image`: its bytes, a public link or base64. A
+finished `job_id` also works. The full guide is at
 [developers.mnml.ai/docs/migrate](https://developers.mnml.ai/docs/migrate).
 
 ## Links

@@ -63,13 +63,9 @@ export type VideoMotion = 'subtle' | 'balanced' | 'dynamic' | 'auto';
  */
 export type ImageInput = string | Uint8Array | ArrayBuffer | Blob;
 
-/**
- * Where an image comes from: the image itself, one of your uploads (to send
- * one image once for several calls), or a finished job.
- */
+/** Where an image comes from: the image itself, or a finished job. */
 export type Source =
   | { image: ImageInput }
-  | { upload_id: string }
   | { job_id: string }
   /** @deprecated The same as `image`, under its first name. */
   | { image_url: string };
@@ -115,8 +111,6 @@ export type CreateEdit = Common &
     region?: Region;
     /** A PNG the size of the image, white where to change, black where to keep. */
     mask?: ImageInput;
-    /** The same mask, uploaded once with `purpose: 'mask'` to use in several calls. */
-    mask_upload_id?: string;
   };
 
 export type EnhancementKind = 'upscale' | 'enhance' | 'bg-remove' | 'outpaint';
@@ -198,15 +192,6 @@ export interface JobCanceled {
   id: string;
   outcome: 'refunded' | 'requested' | 'too-late' | 'already-settled';
   credits_refunded: number;
-}
-
-export interface Upload {
-  id: string;
-  width: number | null;
-  height: number | null;
-  size_bytes: number;
-  purpose: 'image' | 'mask';
-  created_at: string;
 }
 
 export interface AccountCredits {
