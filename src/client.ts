@@ -42,6 +42,15 @@ export interface RequestOptions {
   signal?: AbortSignal;
 }
 
+export interface RenderOptions extends RequestOptions {
+  /**
+   * Hold the answer up to this many seconds (1–60) while the render runs: the
+   * answer's `jobs` then carry the outputs, with no polling. Still running when
+   * the time is up, they carry the jobs as they stand.
+   */
+  wait?: number;
+}
+
 export interface WaitOptions {
   /** Between reads, in milliseconds. Default 3 000 (use more for video). */
   intervalMs?: number;
@@ -66,6 +75,8 @@ const RETRYABLE = new Set([429, 500, 502, 503, 504]);
 /** A longer `Retry-After` (a daily limit runs to midnight UTC) is the caller's to handle. */
 const MAX_RETRY_AFTER_MS = 60_000;
 const TERMINAL = new Set(['succeeded', 'failed', 'canceled']);
+/** How long `createAndWait` asks the API to hold a render's answer. */
+const CREATE_AND_WAIT_SECONDS = 50;
 
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise<void>((resolve, reject) => {
@@ -160,14 +171,33 @@ export class Mnml {
 
   /** Renders from a source image or a prompt alone. `count` starts several jobs at once. */
   readonly renders = {
-    create: async (body: CreateRender, opts?: RequestOptions) =>
-      this.request<RenderStarted>('POST', '/v1/renders', {
-        json: await encodeImages(body),
-        ...opts,
-      }),
-    /** Starts the render and waits for every job it started (one per `count`). */
+    create: async (body: CreateRender, opts: RenderOptions = {}) => {
+      const { wait, ...rest } = opts;
+      return this.request<RenderStarted>(
+        'POST',
+        wait ? `/v1/renders?wait=${wait}` : '/v1/renders',
+        {
+          json: await encodeImages(body),
+          ...rest,
+          // A held answer must not trip the client's own timeout.
+          ...(wait ? { timeoutMs: this.timeoutMs + wait * 1000 } : {}),
+        },
+      );
+    },
+    /**
+     * Starts the render and waits for every job it started (one per `count`).
+     * The API holds the first answer while it runs, so most renders come back
+     * without a single poll; anything still running is polled from there.
+     */
     createAndWait: async (body: CreateRender, opts: CreateAndWaitOptions = {}): Promise<Job[]> => {
-      const started = await this.renders.create(body, startOptions(opts));
+      const started = await this.renders.create(body, {
+        ...startOptions(opts),
+        wait: CREATE_AND_WAIT_SECONDS,
+      });
+      const jobs = started.jobs ?? [];
+      if (jobs.length === started.ids.length && jobs.every((j) => TERMINAL.has(j.status))) {
+        return jobs;
+      }
       return this.jobs.waitAll(started.ids, opts);
     },
   };
@@ -286,7 +316,7 @@ export class Mnml {
   private async request<T>(
     method: 'GET' | 'POST',
     path: string,
-    opts: RequestOptions & { json?: unknown; form?: FormData } = {},
+    opts: RequestOptions & { json?: unknown; form?: FormData; timeoutMs?: number } = {},
   ): Promise<T> {
     const headers: Record<string, string> = {
       ...this.baseHeaders(),
@@ -304,6 +334,7 @@ export class Mnml {
       `${this.baseUrl}${path}`,
       { method, headers, ...(body !== undefined ? { body } : {}) },
       opts.signal,
+      opts.timeoutMs,
     );
     const json = (await res.json().catch(() => null)) as Envelope<T> | null;
     if (res.ok && json?.success) return json.data as T;
@@ -315,9 +346,14 @@ export class Mnml {
    * is sent again (the same headers, so the same idempotency key) after
    * `Retry-After` or a backoff. The last answer is returned, whatever it is.
    */
-  private async send(url: string, init: RequestInit, signal?: AbortSignal): Promise<Response> {
+  private async send(
+    url: string,
+    init: RequestInit,
+    signal?: AbortSignal,
+    timeoutMs = this.timeoutMs,
+  ): Promise<Response> {
     for (let attempt = 0; ; attempt += 1) {
-      const timeout = withTimeout(this.timeoutMs, signal);
+      const timeout = withTimeout(timeoutMs, signal);
       let res: Response;
       try {
         res = await this.fetchImpl(url, { ...init, signal: timeout.signal });

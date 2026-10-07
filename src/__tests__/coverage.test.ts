@@ -173,7 +173,15 @@ describe('the SDK covers the spec', () => {
 
   it('types every answer field', () => {
     expect(
-      keys<RenderStarted>({ id: 1, ids: 1, status: 1, credits_charged: 1, replayed: 1, notes: 1 }),
+      keys<RenderStarted>({
+        id: 1,
+        ids: 1,
+        status: 1,
+        credits_charged: 1,
+        replayed: 1,
+        notes: 1,
+        jobs: 1,
+      }),
     ).toEqual(dataKeys('createRender'));
     for (const id of ['createEdit', 'createEnhancement', 'createVideo']) {
       expect(

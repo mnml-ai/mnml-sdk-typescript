@@ -160,6 +160,11 @@ export interface JobStarted {
 export interface RenderStarted extends JobStarted {
   /** Every job the call started; `id` is the first. */
   ids: string[];
+  /**
+   * Only with `wait`: every job as `jobs.get` reads it, outputs included. Each
+   * one settled when the wait ended; otherwise some are still running.
+   */
+  jobs?: Job[];
 }
 
 export type JobStatus = 'queued' | 'processing' | 'succeeded' | 'failed' | 'canceled';

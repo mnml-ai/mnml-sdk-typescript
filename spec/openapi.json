@@ -631,6 +631,17 @@
         ],
         "parameters": [
           {
+            "name": "wait",
+            "in": "query",
+            "required": false,
+            "description": "Hold the answer up to this many seconds (1 to 60) while the render runs, and answer with the finished jobs in `jobs`: no polling. Still running when the time is up: a 202, poll on.",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 60
+            }
+          },
+          {
             "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
@@ -961,6 +972,197 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "Finished, within ?wait: every job, with its outputs, is in jobs.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit-Limit": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "RateLimit-Remaining": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "RateLimit-Reset": {
+                "$ref": "#/components/headers/RateLimitReset"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "const": true
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "ids": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "status": {
+                          "type": "string"
+                        },
+                        "credits_charged": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "replayed": {
+                          "type": "boolean"
+                        },
+                        "notes": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "jobs": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "queued",
+                                  "processing",
+                                  "succeeded",
+                                  "failed",
+                                  "canceled"
+                                ]
+                              },
+                              "kind": {
+                                "type": "string"
+                              },
+                              "engine": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "outputs": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "url": {
+                                      "type": "string"
+                                    },
+                                    "media": {
+                                      "type": "string",
+                                      "enum": [
+                                        "image",
+                                        "video"
+                                      ]
+                                    },
+                                    "expires_at": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "url",
+                                    "media",
+                                    "expires_at"
+                                  ]
+                                }
+                              },
+                              "credits_charged": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "credits_refunded": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "error": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "code": {
+                                        "type": "string",
+                                        "enum": [
+                                          "UNSAFE_CONTENT",
+                                          "NO_CHANGE",
+                                          "CANCELED",
+                                          "RENDER_FAILED"
+                                        ]
+                                      },
+                                      "message": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "code",
+                                      "message"
+                                    ]
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "created_at": {
+                                "type": "string"
+                              },
+                              "completed_at": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "status",
+                              "kind",
+                              "engine",
+                              "outputs",
+                              "credits_charged",
+                              "credits_refunded",
+                              "error",
+                              "created_at",
+                              "completed_at"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "ids",
+                        "status",
+                        "credits_charged",
+                        "replayed",
+                        "notes"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
           "202": {
             "description": "Started. Poll GET /v1/jobs/{id} for the result.",
             "headers": {
@@ -1016,6 +1218,121 @@
                           "type": "array",
                           "items": {
                             "type": "string"
+                          }
+                        },
+                        "jobs": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "queued",
+                                  "processing",
+                                  "succeeded",
+                                  "failed",
+                                  "canceled"
+                                ]
+                              },
+                              "kind": {
+                                "type": "string"
+                              },
+                              "engine": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "outputs": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "url": {
+                                      "type": "string"
+                                    },
+                                    "media": {
+                                      "type": "string",
+                                      "enum": [
+                                        "image",
+                                        "video"
+                                      ]
+                                    },
+                                    "expires_at": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "url",
+                                    "media",
+                                    "expires_at"
+                                  ]
+                                }
+                              },
+                              "credits_charged": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "credits_refunded": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "error": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "code": {
+                                        "type": "string",
+                                        "enum": [
+                                          "UNSAFE_CONTENT",
+                                          "NO_CHANGE",
+                                          "CANCELED",
+                                          "RENDER_FAILED"
+                                        ]
+                                      },
+                                      "message": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "code",
+                                      "message"
+                                    ]
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "created_at": {
+                                "type": "string"
+                              },
+                              "completed_at": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "status",
+                              "kind",
+                              "engine",
+                              "outputs",
+                              "credits_charged",
+                              "credits_refunded",
+                              "error",
+                              "created_at",
+                              "completed_at"
+                            ]
                           }
                         }
                       },

@@ -12,6 +12,9 @@ First release.
   `ArrayBuffer`, `Blob`), a public link or base64. No upload step. Each reference, an edit's
   `mask` and a video's `end_frame` take an image the same way; a reference can be just the
   image. `image_url` still works and is deprecated.
+- `renders.create(body, { wait })`: the API holds the answer up to `wait` seconds (1–60) and
+  returns the finished jobs in `jobs`. `renders.createAndWait` uses it, so most renders need no
+  polling at all.
 
 - `Mnml` client for the mnml API v1: renders, edits, enhancements, videos, uploads, jobs
   (`get`, `wait`, `waitAll`, `cancel`), account and engines.

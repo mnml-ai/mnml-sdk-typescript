@@ -275,6 +275,32 @@ describe('Mnml', () => {
     expect(f.calls.slice(1).every((c) => c.init.method === 'GET')).toBe(true);
   });
 
+  it('asks the API to hold a render, and polls nothing when it comes back settled', async () => {
+    const done = { id: '7', status: 'succeeded', outputs: [{ url: 'u', media: 'image' }] };
+    const f = fakeFetch([
+      ok({
+        id: '7',
+        ids: ['7'],
+        status: 'succeeded',
+        credits_charged: 25,
+        replayed: false,
+        notes: [],
+        jobs: [done],
+      }),
+      ok(
+        { id: '8', ids: ['8'], status: 'queued', credits_charged: 25, replayed: false, notes: [] },
+        202,
+      ),
+    ]);
+    const mnml = new Mnml({ apiKey: 'k', fetch: f.impl });
+    const jobs = await mnml.renders.createAndWait({ prompt: 'x' });
+    expect(jobs).toEqual([done]);
+    expect(f.calls).toHaveLength(1);
+    expect(f.calls[0]!.url).toBe('https://api.mnml.ai/v1/renders?wait=50');
+    await mnml.renders.create({ prompt: 'x' }, { wait: 30 });
+    expect(f.calls[1]!.url).toBe('https://api.mnml.ai/v1/renders?wait=30');
+  });
+
   it('starts an edit and returns the settled job', async () => {
     const f = fakeFetch([
       ok({ id: '5', status: 'queued', credits_charged: 1, replayed: false, notes: [] }, 202),
