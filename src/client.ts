@@ -9,7 +9,7 @@ import type {
   Engines,
   Job,
   JobCanceled,
-  JobEvent,
+  JobStreamEvent,
   JobOutput,
   JobStarted,
   RenderStarted,
@@ -262,7 +262,7 @@ export class Mnml {
      * }
      * ```
      */
-    stream: (id: string, opts: { signal?: AbortSignal } = {}): AsyncGenerator<JobEvent> =>
+    stream: (id: string, opts: { signal?: AbortSignal } = {}): AsyncGenerator<JobStreamEvent> =>
       this.streamEvents(`/v2/jobs/${encodeURIComponent(id)}/events`, opts.signal),
     /** Cancels a job; one cancelled before it produced anything is refunded. */
     cancel: (id: string, opts?: RequestOptions) =>
@@ -369,7 +369,7 @@ export class Mnml {
    * refusal throws `MnmlError`, and a connection that ends before the last
    * event throws `MnmlError` with `STREAM_ENDED`.
    */
-  private async *streamEvents(path: string, signal?: AbortSignal): AsyncGenerator<JobEvent> {
+  private async *streamEvents(path: string, signal?: AbortSignal): AsyncGenerator<JobStreamEvent> {
     const res = await this.send(
       `${this.baseUrl}${path}`,
       {
@@ -461,8 +461,8 @@ function startOptions(opts: CreateAndWaitOptions): RequestOptions {
   };
 }
 
-/** One Server-Sent Events block as a `JobEvent`; null for a comment (`: ping`) or an unknown event. */
-function parseEvent(block: string): JobEvent | null {
+/** One Server-Sent Events block as a `JobStreamEvent`; null for a comment (`: ping`) or an unknown event. */
+function parseEvent(block: string): JobStreamEvent | null {
   let type = 'message';
   const data: string[] = [];
   for (const line of block.split('\n')) {

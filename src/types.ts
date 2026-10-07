@@ -194,7 +194,7 @@ export interface Job {
  * `timeout` (still running after ten minutes: open the stream again) or
  * `error` (the API could not read the job; it still runs).
  */
-export type JobEvent =
+export type JobStreamEvent =
   | { type: 'job' | 'done' | 'timeout'; job: Job }
   | { type: 'error'; error: { code: string; message: string } };
 

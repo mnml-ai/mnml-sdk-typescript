@@ -12,7 +12,7 @@ First release.
   does not call). `uploads.create`, `upload_id` and `mask_upload_id` are gone, as the API no
   longer has uploads: send the image in the call, or a finished `job_id`.
 - `jobs.stream(id)`: follow a job over one connection (Server-Sent Events), as an async
-  iterator of `JobEvent`s: `job` as it changes, then `done`, `timeout` or `error`.
+  iterator of `JobStreamEvent`s: `job` as it changes, then `done`, `timeout` or `error`.
 
 - `image` on every create call: the image in the same call, as bytes (`Buffer`, `Uint8Array`,
   `ArrayBuffer`, `Blob`), a public link or base64. No upload step. Each reference, an edit's
