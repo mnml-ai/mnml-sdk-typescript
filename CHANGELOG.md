@@ -8,6 +8,14 @@ All notable changes to this package are recorded here. The format follows
 
 First release.
 
+- `image` on every create call: the image in the same call, as bytes (`Buffer`, `Uint8Array`,
+  `ArrayBuffer`, `Blob`), a public link or base64. No upload step. Each reference, an edit's
+  `mask` and a video's `end_frame` take an image the same way; a reference can be just the
+  image. `image_url` still works and is deprecated.
+- `wait` (1–90 seconds) on `renders.create` and `jobs.get`: the API holds the answer until the
+  job settles. `createAndWait` and `jobs.wait` use it, so a render is one or two calls, not a
+  polling loop.
+
 - `Mnml` client for the mnml API v1: renders, edits, enhancements, videos, uploads, jobs
   (`get`, `wait`, `waitAll`, `cancel`), account and engines.
 - `createAndWait` on renders, edits, enhancements and videos: start a job and wait for it.

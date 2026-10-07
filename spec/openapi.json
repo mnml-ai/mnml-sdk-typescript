@@ -469,7 +469,7 @@
     "/v1/uploads": {
       "post": {
         "operationId": "createUpload",
-        "summary": "Upload an image a render can use: a multipart \"file\", or JSON { url } that we fetch. The same image twice is the same upload.",
+        "summary": "Optional: upload an image once to use in several calls (every call also takes its image inline). A multipart \"file\", or JSON { url } that we fetch. It is kept 24 hours, then deleted, and never appears in your mnml library. The same image twice is the same upload.",
         "tags": [
           "Uploads"
         ],
@@ -625,11 +625,22 @@
     "/v1/renders": {
       "post": {
         "operationId": "createRender",
-        "summary": "Start a render. Charged at the engine price when it starts; a failed render is refunded.",
+        "summary": "Start a render. Send the image in the same call: a link, base64, or the file itself as multipart form data. Charged at the engine price when it starts; a failed render is refunded.",
         "tags": [
           "Renders"
         ],
         "parameters": [
+          {
+            "name": "wait",
+            "in": "query",
+            "required": false,
+            "description": "Hold the answer up to this many seconds (1 to 90) while the render runs, and answer with the finished jobs in `jobs`. Still running when the time is up: a 202; read the job with GET /v1/jobs/{id}?wait=90 until it settles.",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 90
+            }
+          },
           {
             "$ref": "#/components/parameters/IdempotencyKey"
           }
@@ -662,51 +673,77 @@
                     "minLength": 1,
                     "maxLength": 4000
                   },
+                  "image": {
+                    "description": "The image: a public https:// link, a data:image/…;base64, URI or base64 bytes, or (multipart) the file itself.",
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "image_url": {
+                    "deprecated": true,
+                    "description": "Same as image.",
+                    "type": "string",
+                    "minLength": 1
+                  },
                   "upload_id": {
+                    "description": "An image from POST /v1/uploads, to reuse one image.",
                     "type": "string",
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   },
-                  "image_url": {
-                    "type": "string",
-                    "format": "uri"
-                  },
                   "job_id": {
+                    "description": "A finished job of yours: work on its output without downloading it.",
                     "type": "string",
-                    "pattern": "^\\d{1,19}$"
+                    "pattern": "^\\d{1,18}$"
                   },
                   "references": {
                     "maxItems": 15,
                     "type": "array",
                     "items": {
-                      "type": "object",
-                      "properties": {
-                        "upload_id": {
+                      "anyOf": [
+                        {
                           "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          "minLength": 1
                         },
-                        "image_url": {
-                          "type": "string",
-                          "format": "uri"
-                        },
-                        "job_id": {
-                          "type": "string",
-                          "pattern": "^\\d{1,19}$"
-                        },
-                        "mode": {
-                          "type": "string",
-                          "enum": [
-                            "auto",
-                            "style",
-                            "material",
-                            "atmosphere",
-                            "color",
-                            "geometry"
-                          ]
+                        {
+                          "type": "object",
+                          "properties": {
+                            "image": {
+                              "description": "The image: a public https:// link, a data:image/…;base64, URI or base64 bytes, or (multipart) the file itself.",
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "image_url": {
+                              "deprecated": true,
+                              "description": "Same as image.",
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "upload_id": {
+                              "description": "An image from POST /v1/uploads, to reuse one image.",
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "job_id": {
+                              "description": "A finished job of yours: work on its output without downloading it.",
+                              "type": "string",
+                              "pattern": "^\\d{1,18}$"
+                            },
+                            "mode": {
+                              "type": "string",
+                              "enum": [
+                                "auto",
+                                "style",
+                                "material",
+                                "atmosphere",
+                                "color",
+                                "geometry"
+                              ]
+                            }
+                          },
+                          "additionalProperties": false
                         }
-                      },
-                      "additionalProperties": false
+                      ]
                     }
                   },
                   "settings": {
@@ -747,7 +784,180 @@
                     "maximum": 9007199254740991
                   },
                   "webhook_url": {
-                    "description": "A public https:// URL to send this job\u2019s settle event to, signed like every webhook.",
+                    "description": "A public https:// URL to send this job’s settle event to, signed like every webhook.",
+                    "type": "string",
+                    "maxLength": 2048,
+                    "format": "uri"
+                  }
+                },
+                "required": [
+                  "prompt"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "engine": {
+                    "type": "string",
+                    "maxLength": 40
+                  },
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "exterior",
+                      "interior",
+                      "masterplan",
+                      "plan",
+                      "landscape",
+                      "product",
+                      "text-to-render"
+                    ]
+                  },
+                  "prompt": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4000
+                  },
+                  "image": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "binary"
+                      },
+                      {
+                        "description": "The image: a public https:// link, a data:image/…;base64, URI or base64 bytes, or (multipart) the file itself.",
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    ]
+                  },
+                  "image_url": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "binary"
+                      },
+                      {
+                        "deprecated": true,
+                        "description": "Same as image.",
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    ],
+                    "deprecated": true
+                  },
+                  "upload_id": {
+                    "description": "An image from POST /v1/uploads, to reuse one image.",
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "job_id": {
+                    "description": "A finished job of yours: work on its output without downloading it.",
+                    "type": "string",
+                    "pattern": "^\\d{1,18}$"
+                  },
+                  "references": {
+                    "maxItems": 15,
+                    "type": "array",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "binary"
+                        },
+                        {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "image": {
+                                  "description": "The image: a public https:// link, a data:image/…;base64, URI or base64 bytes, or (multipart) the file itself.",
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "image_url": {
+                                  "deprecated": true,
+                                  "description": "Same as image.",
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "upload_id": {
+                                  "description": "An image from POST /v1/uploads, to reuse one image.",
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                },
+                                "job_id": {
+                                  "description": "A finished job of yours: work on its output without downloading it.",
+                                  "type": "string",
+                                  "pattern": "^\\d{1,18}$"
+                                },
+                                "mode": {
+                                  "type": "string",
+                                  "enum": [
+                                    "auto",
+                                    "style",
+                                    "material",
+                                    "atmosphere",
+                                    "color",
+                                    "geometry"
+                                  ]
+                                }
+                              },
+                              "additionalProperties": false
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  "settings": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string",
+                      "maxLength": 40
+                    },
+                    "additionalProperties": {
+                      "type": "string",
+                      "maxLength": 320
+                    }
+                  },
+                  "aspect_ratio": {
+                    "type": "string",
+                    "enum": [
+                      "auto",
+                      "1:1",
+                      "3:2",
+                      "4:3",
+                      "5:4",
+                      "16:9",
+                      "21:9",
+                      "2:3",
+                      "3:4",
+                      "4:5",
+                      "9:16"
+                    ]
+                  },
+                  "count": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 4
+                  },
+                  "seed": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "webhook_url": {
+                    "description": "A public https:// URL to send this job’s settle event to, signed like every webhook.",
                     "type": "string",
                     "maxLength": 2048,
                     "format": "uri"
@@ -762,6 +972,197 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "Finished, within ?wait: every job, with its outputs, is in jobs.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit-Limit": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "RateLimit-Remaining": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "RateLimit-Reset": {
+                "$ref": "#/components/headers/RateLimitReset"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "const": true
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "ids": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "status": {
+                          "type": "string"
+                        },
+                        "credits_charged": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "replayed": {
+                          "type": "boolean"
+                        },
+                        "notes": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "jobs": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "queued",
+                                  "processing",
+                                  "succeeded",
+                                  "failed",
+                                  "canceled"
+                                ]
+                              },
+                              "kind": {
+                                "type": "string"
+                              },
+                              "engine": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "outputs": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "url": {
+                                      "type": "string"
+                                    },
+                                    "media": {
+                                      "type": "string",
+                                      "enum": [
+                                        "image",
+                                        "video"
+                                      ]
+                                    },
+                                    "expires_at": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "url",
+                                    "media",
+                                    "expires_at"
+                                  ]
+                                }
+                              },
+                              "credits_charged": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "credits_refunded": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "error": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "code": {
+                                        "type": "string",
+                                        "enum": [
+                                          "UNSAFE_CONTENT",
+                                          "NO_CHANGE",
+                                          "CANCELED",
+                                          "RENDER_FAILED"
+                                        ]
+                                      },
+                                      "message": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "code",
+                                      "message"
+                                    ]
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "created_at": {
+                                "type": "string"
+                              },
+                              "completed_at": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "status",
+                              "kind",
+                              "engine",
+                              "outputs",
+                              "credits_charged",
+                              "credits_refunded",
+                              "error",
+                              "created_at",
+                              "completed_at"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "ids",
+                        "status",
+                        "credits_charged",
+                        "replayed",
+                        "notes"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
           "202": {
             "description": "Started. Poll GET /v1/jobs/{id} for the result.",
             "headers": {
@@ -817,6 +1218,121 @@
                           "type": "array",
                           "items": {
                             "type": "string"
+                          }
+                        },
+                        "jobs": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "queued",
+                                  "processing",
+                                  "succeeded",
+                                  "failed",
+                                  "canceled"
+                                ]
+                              },
+                              "kind": {
+                                "type": "string"
+                              },
+                              "engine": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "outputs": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "url": {
+                                      "type": "string"
+                                    },
+                                    "media": {
+                                      "type": "string",
+                                      "enum": [
+                                        "image",
+                                        "video"
+                                      ]
+                                    },
+                                    "expires_at": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "url",
+                                    "media",
+                                    "expires_at"
+                                  ]
+                                }
+                              },
+                              "credits_charged": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "credits_refunded": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "error": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "code": {
+                                        "type": "string",
+                                        "enum": [
+                                          "UNSAFE_CONTENT",
+                                          "NO_CHANGE",
+                                          "CANCELED",
+                                          "RENDER_FAILED"
+                                        ]
+                                      },
+                                      "message": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "code",
+                                      "message"
+                                    ]
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "created_at": {
+                                "type": "string"
+                              },
+                              "completed_at": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "status",
+                              "kind",
+                              "engine",
+                              "outputs",
+                              "credits_charged",
+                              "credits_refunded",
+                              "error",
+                              "created_at",
+                              "completed_at"
+                            ]
                           }
                         }
                       },
@@ -887,18 +1403,27 @@
                     "minLength": 1,
                     "maxLength": 4000
                   },
+                  "image": {
+                    "description": "The image: a public https:// link, a data:image/…;base64, URI or base64 bytes, or (multipart) the file itself.",
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "image_url": {
+                    "deprecated": true,
+                    "description": "Same as image.",
+                    "type": "string",
+                    "minLength": 1
+                  },
                   "upload_id": {
+                    "description": "An image from POST /v1/uploads, to reuse one image.",
                     "type": "string",
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   },
-                  "image_url": {
-                    "type": "string",
-                    "format": "uri"
-                  },
                   "job_id": {
+                    "description": "A finished job of yours: work on its output without downloading it.",
                     "type": "string",
-                    "pattern": "^\\d{1,19}$"
+                    "pattern": "^\\d{1,18}$"
                   },
                   "engine": {
                     "type": "string",
@@ -920,41 +1445,58 @@
                     "maxItems": 15,
                     "type": "array",
                     "items": {
-                      "type": "object",
-                      "properties": {
-                        "upload_id": {
+                      "anyOf": [
+                        {
                           "type": "string",
-                          "format": "uuid",
-                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          "minLength": 1
                         },
-                        "image_url": {
-                          "type": "string",
-                          "format": "uri"
-                        },
-                        "job_id": {
-                          "type": "string",
-                          "pattern": "^\\d{1,19}$"
-                        },
-                        "mode": {
-                          "type": "string",
-                          "enum": [
-                            "auto",
-                            "style",
-                            "material",
-                            "atmosphere",
-                            "color",
-                            "geometry"
-                          ]
+                        {
+                          "type": "object",
+                          "properties": {
+                            "image": {
+                              "description": "The image: a public https:// link, a data:image/…;base64, URI or base64 bytes, or (multipart) the file itself.",
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "image_url": {
+                              "deprecated": true,
+                              "description": "Same as image.",
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "upload_id": {
+                              "description": "An image from POST /v1/uploads, to reuse one image.",
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "job_id": {
+                              "description": "A finished job of yours: work on its output without downloading it.",
+                              "type": "string",
+                              "pattern": "^\\d{1,18}$"
+                            },
+                            "mode": {
+                              "type": "string",
+                              "enum": [
+                                "auto",
+                                "style",
+                                "material",
+                                "atmosphere",
+                                "color",
+                                "geometry"
+                              ]
+                            }
+                          },
+                          "additionalProperties": false
                         }
-                      },
-                      "additionalProperties": false
+                      ]
                     }
                   },
                   "region": {
                     "type": "object",
                     "properties": {
                       "box": {
-                        "description": "x, y of the top-left corner, width, height; all 0\u20131.",
+                        "description": "x, y of the top-left corner, width, height; all 0–1.",
                         "type": "object",
                         "properties": {
                           "x": {
@@ -986,7 +1528,7 @@
                         ]
                       },
                       "polygon": {
-                        "description": "An outline of [x, y] points, 0\u20131.",
+                        "description": "An outline of [x, y] points, 0–1.",
                         "minItems": 3,
                         "maxItems": 64,
                         "type": "array",
@@ -1012,13 +1554,236 @@
                     },
                     "description": "The area, in fractions of the image from the top-left."
                   },
+                  "mask": {
+                    "type": "string",
+                    "minLength": 1
+                  },
                   "mask_upload_id": {
                     "type": "string",
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   },
                   "webhook_url": {
-                    "description": "A public https:// URL to send this job\u2019s settle event to, signed like every webhook.",
+                    "description": "A public https:// URL to send this job’s settle event to, signed like every webhook.",
+                    "type": "string",
+                    "maxLength": 2048,
+                    "format": "uri"
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "edit",
+                      "erase"
+                    ]
+                  },
+                  "prompt": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4000
+                  },
+                  "image": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "binary"
+                      },
+                      {
+                        "description": "The image: a public https:// link, a data:image/…;base64, URI or base64 bytes, or (multipart) the file itself.",
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    ]
+                  },
+                  "image_url": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "binary"
+                      },
+                      {
+                        "deprecated": true,
+                        "description": "Same as image.",
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    ],
+                    "deprecated": true
+                  },
+                  "upload_id": {
+                    "description": "An image from POST /v1/uploads, to reuse one image.",
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "job_id": {
+                    "description": "A finished job of yours: work on its output without downloading it.",
+                    "type": "string",
+                    "pattern": "^\\d{1,18}$"
+                  },
+                  "engine": {
+                    "type": "string",
+                    "maxLength": 40
+                  },
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "exterior",
+                      "interior",
+                      "masterplan",
+                      "plan",
+                      "landscape",
+                      "product",
+                      "text-to-render"
+                    ]
+                  },
+                  "references": {
+                    "maxItems": 15,
+                    "type": "array",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "binary"
+                        },
+                        {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "image": {
+                                  "description": "The image: a public https:// link, a data:image/…;base64, URI or base64 bytes, or (multipart) the file itself.",
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "image_url": {
+                                  "deprecated": true,
+                                  "description": "Same as image.",
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "upload_id": {
+                                  "description": "An image from POST /v1/uploads, to reuse one image.",
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                },
+                                "job_id": {
+                                  "description": "A finished job of yours: work on its output without downloading it.",
+                                  "type": "string",
+                                  "pattern": "^\\d{1,18}$"
+                                },
+                                "mode": {
+                                  "type": "string",
+                                  "enum": [
+                                    "auto",
+                                    "style",
+                                    "material",
+                                    "atmosphere",
+                                    "color",
+                                    "geometry"
+                                  ]
+                                }
+                              },
+                              "additionalProperties": false
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  "region": {
+                    "type": "object",
+                    "properties": {
+                      "box": {
+                        "description": "x, y of the top-left corner, width, height; all 0–1.",
+                        "type": "object",
+                        "properties": {
+                          "x": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                          },
+                          "y": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                          },
+                          "width": {
+                            "type": "number",
+                            "exclusiveMinimum": 0,
+                            "maximum": 1
+                          },
+                          "height": {
+                            "type": "number",
+                            "exclusiveMinimum": 0,
+                            "maximum": 1
+                          }
+                        },
+                        "required": [
+                          "x",
+                          "y",
+                          "width",
+                          "height"
+                        ]
+                      },
+                      "polygon": {
+                        "description": "An outline of [x, y] points, 0–1.",
+                        "minItems": 3,
+                        "maxItems": 64,
+                        "type": "array",
+                        "items": {
+                          "type": "array",
+                          "prefixItems": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            }
+                          ],
+                          "items": false,
+                          "minItems": 2,
+                          "maxItems": 2
+                        }
+                      }
+                    },
+                    "description": "The area, in fractions of the image from the top-left."
+                  },
+                  "mask": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "binary"
+                      },
+                      {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    ]
+                  },
+                  "mask_upload_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "webhook_url": {
+                    "description": "A public https:// URL to send this job’s settle event to, signed like every webhook.",
                     "type": "string",
                     "maxLength": 2048,
                     "format": "uri"
@@ -1145,18 +1910,27 @@
                       "outpaint"
                     ]
                   },
+                  "image": {
+                    "description": "The image: a public https:// link, a data:image/…;base64, URI or base64 bytes, or (multipart) the file itself.",
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "image_url": {
+                    "deprecated": true,
+                    "description": "Same as image.",
+                    "type": "string",
+                    "minLength": 1
+                  },
                   "upload_id": {
+                    "description": "An image from POST /v1/uploads, to reuse one image.",
                     "type": "string",
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   },
-                  "image_url": {
-                    "type": "string",
-                    "format": "uri"
-                  },
                   "job_id": {
+                    "description": "A finished job of yours: work on its output without downloading it.",
                     "type": "string",
-                    "pattern": "^\\d{1,19}$"
+                    "pattern": "^\\d{1,18}$"
                   },
                   "creativity": {
                     "type": "integer",
@@ -1184,7 +1958,97 @@
                     ]
                   },
                   "webhook_url": {
-                    "description": "A public https:// URL to send this job\u2019s settle event to, signed like every webhook.",
+                    "description": "A public https:// URL to send this job’s settle event to, signed like every webhook.",
+                    "type": "string",
+                    "maxLength": 2048,
+                    "format": "uri"
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "upscale",
+                      "enhance",
+                      "bg-remove",
+                      "outpaint"
+                    ]
+                  },
+                  "image": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "binary"
+                      },
+                      {
+                        "description": "The image: a public https:// link, a data:image/…;base64, URI or base64 bytes, or (multipart) the file itself.",
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    ]
+                  },
+                  "image_url": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "binary"
+                      },
+                      {
+                        "deprecated": true,
+                        "description": "Same as image.",
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    ],
+                    "deprecated": true
+                  },
+                  "upload_id": {
+                    "description": "An image from POST /v1/uploads, to reuse one image.",
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "job_id": {
+                    "description": "A finished job of yours: work on its output without downloading it.",
+                    "type": "string",
+                    "pattern": "^\\d{1,18}$"
+                  },
+                  "creativity": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 100
+                  },
+                  "prompt": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4000
+                  },
+                  "aspect_ratio": {
+                    "type": "string",
+                    "enum": [
+                      "1:1",
+                      "3:2",
+                      "4:3",
+                      "5:4",
+                      "16:9",
+                      "21:9",
+                      "2:3",
+                      "3:4",
+                      "4:5",
+                      "9:16"
+                    ]
+                  },
+                  "webhook_url": {
+                    "description": "A public https:// URL to send this job’s settle event to, signed like every webhook.",
                     "type": "string",
                     "maxLength": 2048,
                     "format": "uri"
@@ -1305,18 +2169,27 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "image": {
+                    "description": "The image: a public https:// link, a data:image/…;base64, URI or base64 bytes, or (multipart) the file itself.",
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "image_url": {
+                    "deprecated": true,
+                    "description": "Same as image.",
+                    "type": "string",
+                    "minLength": 1
+                  },
                   "upload_id": {
+                    "description": "An image from POST /v1/uploads, to reuse one image.",
                     "type": "string",
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   },
-                  "image_url": {
-                    "type": "string",
-                    "format": "uri"
-                  },
                   "job_id": {
+                    "description": "A finished job of yours: work on its output without downloading it.",
                     "type": "string",
-                    "pattern": "^\\d{1,19}$"
+                    "pattern": "^\\d{1,18}$"
                   },
                   "model": {
                     "type": "string",
@@ -1341,29 +2214,168 @@
                     "maxLength": 4000
                   },
                   "end_frame": {
-                    "type": "object",
-                    "properties": {
-                      "upload_id": {
+                    "anyOf": [
+                      {
                         "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        "minLength": 1
                       },
-                      "image_url": {
-                        "type": "string",
-                        "format": "uri"
-                      },
-                      "job_id": {
-                        "type": "string",
-                        "pattern": "^\\d{1,19}$"
+                      {
+                        "type": "object",
+                        "properties": {
+                          "image": {
+                            "description": "The image: a public https:// link, a data:image/…;base64, URI or base64 bytes, or (multipart) the file itself.",
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "image_url": {
+                            "deprecated": true,
+                            "description": "Same as image.",
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "upload_id": {
+                            "description": "An image from POST /v1/uploads, to reuse one image.",
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "job_id": {
+                            "description": "A finished job of yours: work on its output without downloading it.",
+                            "type": "string",
+                            "pattern": "^\\d{1,18}$"
+                          }
+                        },
+                        "additionalProperties": false
                       }
-                    },
-                    "additionalProperties": false
+                    ]
                   },
                   "cinematic": {
                     "type": "boolean"
                   },
                   "webhook_url": {
-                    "description": "A public https:// URL to send this job\u2019s settle event to, signed like every webhook.",
+                    "description": "A public https:// URL to send this job’s settle event to, signed like every webhook.",
+                    "type": "string",
+                    "maxLength": 2048,
+                    "format": "uri"
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "image": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "binary"
+                      },
+                      {
+                        "description": "The image: a public https:// link, a data:image/…;base64, URI or base64 bytes, or (multipart) the file itself.",
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    ]
+                  },
+                  "image_url": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "binary"
+                      },
+                      {
+                        "deprecated": true,
+                        "description": "Same as image.",
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    ],
+                    "deprecated": true
+                  },
+                  "upload_id": {
+                    "description": "An image from POST /v1/uploads, to reuse one image.",
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "job_id": {
+                    "description": "A finished job of yours: work on its output without downloading it.",
+                    "type": "string",
+                    "pattern": "^\\d{1,18}$"
+                  },
+                  "model": {
+                    "type": "string",
+                    "maxLength": 40
+                  },
+                  "duration_seconds": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 60
+                  },
+                  "camera_movement": {
+                    "type": "string",
+                    "maxLength": 32
+                  },
+                  "motion": {
+                    "type": "string",
+                    "maxLength": 16
+                  },
+                  "prompt": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4000
+                  },
+                  "end_frame": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "binary"
+                      },
+                      {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "image": {
+                                "description": "The image: a public https:// link, a data:image/…;base64, URI or base64 bytes, or (multipart) the file itself.",
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "image_url": {
+                                "deprecated": true,
+                                "description": "Same as image.",
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "upload_id": {
+                                "description": "An image from POST /v1/uploads, to reuse one image.",
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "job_id": {
+                                "description": "A finished job of yours: work on its output without downloading it.",
+                                "type": "string",
+                                "pattern": "^\\d{1,18}$"
+                              }
+                            },
+                            "additionalProperties": false
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "cinematic": {
+                    "type": "boolean"
+                  },
+                  "webhook_url": {
+                    "description": "A public https:// URL to send this job’s settle event to, signed like every webhook.",
                     "type": "string",
                     "maxLength": 2048,
                     "format": "uri"
@@ -1465,7 +2477,7 @@
     "/v1/jobs/{id}": {
       "get": {
         "operationId": "getJob",
-        "summary": "Read a job: its status, its outputs as signed links that expire, what it was charged and refunded, and why it failed.",
+        "summary": "Read a job: its status, its outputs as signed links that expire, what it was charged and refunded, and why it failed. A job and its outputs are kept 7 days.",
         "tags": [
           "Jobs"
         ],
@@ -1477,7 +2489,18 @@
             "description": "The job id a create call answered with.",
             "schema": {
               "type": "string",
-              "pattern": "^\\d{1,19}$"
+              "pattern": "^\\d{1,18}$"
+            }
+          },
+          {
+            "name": "wait",
+            "in": "query",
+            "required": false,
+            "description": "Hold the answer up to this many seconds (1 to 90) until the job settles; it answers as soon as it does. Call again while status is queued or processing.",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 90
             }
           }
         ],
@@ -1655,7 +2678,7 @@
             "description": "The job id a create call answered with.",
             "schema": {
               "type": "string",
-              "pattern": "^\\d{1,19}$"
+              "pattern": "^\\d{1,18}$"
             }
           }
         ],
@@ -1749,7 +2772,7 @@
             "description": "The job id a create call answered with.",
             "schema": {
               "type": "string",
-              "pattern": "^\\d{1,19}$"
+              "pattern": "^\\d{1,18}$"
             }
           },
           {
@@ -3338,14 +4361,14 @@
     "/v1/render/enhancer": {
       "post": {
         "operationId": "legacyV1RenderEnhancer",
-        "summary": "Legacy alias of /v1/enhancements. An enhance. `creativity` (0\u20131) becomes 0\u2013100; the other knobs are not read. Needs an account that has paid.",
+        "summary": "Legacy alias of /v1/enhancements. An enhance. `creativity` (0–1) becomes 0–100; the other knobs are not read. Needs an account that has paid.",
         "deprecated": true,
         "x-mnml-legacy": {
           "kind": "enhance",
           "successor": "/v1/enhancements",
           "legacyCredits": "1",
           "paidOnly": true,
-          "note": "An enhance. `creativity` (0\u20131) becomes 0\u2013100; the other knobs are not read.",
+          "note": "An enhance. `creativity` (0–1) becomes 0–100; the other knobs are not read.",
           "enhancement": "enhance"
         },
         "tags": [
@@ -3947,7 +4970,7 @@
       "apiKey": {
         "type": "http",
         "scheme": "bearer",
-        "bearerFormat": "mk_live_\u2026",
+        "bearerFormat": "mk_live_…",
         "description": "An API key from developers.mnml.ai/console/keys."
       }
     },

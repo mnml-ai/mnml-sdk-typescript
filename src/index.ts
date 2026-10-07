@@ -3,6 +3,8 @@ export type {
   CreateAndWaitOptions,
   DownloadedFile,
   MnmlOptions,
+  ReadOptions,
+  RenderOptions,
   RequestOptions,
   UploadInput,
   WaitOptions,

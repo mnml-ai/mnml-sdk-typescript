@@ -53,7 +53,7 @@ describe('Mnml', () => {
     const mnml = new Mnml({ apiKey: 'mk_live_x', fetch: f.impl });
     const started = await mnml.renders.create({
       prompt: 'Timber facade',
-      image_url: 'https://e.com/a.png',
+      image: 'https://e.com/a.png',
     });
     expect(started.credits_charged).toBe(25);
     const [call] = f.calls;
@@ -61,10 +61,47 @@ describe('Mnml', () => {
     expect(header(call!, 'authorization')).toBe('Bearer mk_live_x');
     expect(JSON.parse(call!.init.body as string)).toEqual({
       prompt: 'Timber facade',
-      image_url: 'https://e.com/a.png',
+      image: 'https://e.com/a.png',
     });
     expect(header(call!, 'idempotency-key')).toMatch(/^[0-9a-f-]{36}$/);
     expect(header(call!, 'user-agent')).toMatch(/^mnml-sdk-typescript\/\d+\.\d+\.\d+$/);
+  });
+
+  it('sends bytes as a base64 data URI, and a string as it is', async () => {
+    const started = { id: '1', status: 'queued', credits_charged: 25, replayed: false, notes: [] };
+    const f = fakeFetch([ok({ ...started, ids: ['1'] }, 202), ok(started, 202), ok(started, 202)]);
+    const mnml = new Mnml({ apiKey: 'k', fetch: f.impl });
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
+    const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 4, 5]);
+    const b64 = (b: Uint8Array) => Buffer.from(b).toString('base64');
+    await mnml.renders.create({
+      prompt: 'Timber facade',
+      image: png,
+      references: [
+        'https://e.com/ref.png',
+        new Blob([jpeg]),
+        { image: jpeg.buffer, mode: 'material' },
+      ],
+    });
+    expect(JSON.parse(f.calls[0]!.init.body as string)).toEqual({
+      prompt: 'Timber facade',
+      image: `data:image/png;base64,${b64(png)}`,
+      references: [
+        'https://e.com/ref.png',
+        `data:image/jpeg;base64,${b64(jpeg)}`,
+        { image: `data:image/jpeg;base64,${b64(jpeg)}`, mode: 'material' },
+      ],
+    });
+    await mnml.edits.create({ image: 'https://e.com/a.png', prompt: 'A green roof', mask: png });
+    expect(JSON.parse(f.calls[1]!.init.body as string)).toMatchObject({
+      image: 'https://e.com/a.png',
+      mask: `data:image/png;base64,${b64(png)}`,
+    });
+    await mnml.videos.create({ job_id: '12', end_frame: Buffer.from(jpeg) });
+    expect(JSON.parse(f.calls[2]!.init.body as string)).toEqual({
+      job_id: '12',
+      end_frame: `data:image/jpeg;base64,${b64(jpeg)}`,
+    });
   });
 
   it('sends no idempotency key on a read', async () => {
@@ -161,7 +198,7 @@ describe('Mnml', () => {
     expect(f.calls).toHaveLength(2);
   });
 
-  it('waits for a job to settle', async () => {
+  it('waits for a job to settle, asking the API to hold each read', async () => {
     vi.useFakeTimers();
     const job = (status: string) => ok({ id: '9', status, outputs: [] });
     const f = fakeFetch([job('queued'), job('processing'), job('succeeded')]);
@@ -169,7 +206,22 @@ describe('Mnml', () => {
     const p = mnml.jobs.wait('9', { intervalMs: 1000 });
     await vi.advanceTimersByTimeAsync(2000);
     await expect(p).resolves.toMatchObject({ status: 'succeeded' });
-    expect(f.calls.every((c) => c.url.endsWith('/v1/jobs/9'))).toBe(true);
+    expect(f.calls.map((c) => c.url)).toEqual(
+      Array(3).fill('https://api.mnml.ai/v1/jobs/9?wait=90'),
+    );
+  });
+
+  it('asks for no longer than the wait has left, and reads plainly at the end', async () => {
+    const f = fakeFetch([
+      ok({ id: '9', status: 'processing', outputs: [] }),
+      ok({ id: '9', status: 'succeeded', outputs: [] }),
+      ok({ id: '9', status: 'succeeded', outputs: [] }),
+    ]);
+    const mnml = new Mnml({ apiKey: 'k', fetch: f.impl });
+    await mnml.jobs.wait('9', { intervalMs: 0, timeoutMs: 30_500 });
+    expect(f.calls[0]!.url).toBe('https://api.mnml.ai/v1/jobs/9?wait=30');
+    await mnml.jobs.get('9');
+    expect(f.calls[2]!.url).toBe('https://api.mnml.ai/v1/jobs/9');
   });
 
   it('stops waiting at the deadline, leaving the job running', async () => {
@@ -238,6 +290,32 @@ describe('Mnml', () => {
     expect(f.calls.slice(1).every((c) => c.init.method === 'GET')).toBe(true);
   });
 
+  it('asks the API to hold a render, and polls nothing when it comes back settled', async () => {
+    const done = { id: '7', status: 'succeeded', outputs: [{ url: 'u', media: 'image' }] };
+    const f = fakeFetch([
+      ok({
+        id: '7',
+        ids: ['7'],
+        status: 'succeeded',
+        credits_charged: 25,
+        replayed: false,
+        notes: [],
+        jobs: [done],
+      }),
+      ok(
+        { id: '8', ids: ['8'], status: 'queued', credits_charged: 25, replayed: false, notes: [] },
+        202,
+      ),
+    ]);
+    const mnml = new Mnml({ apiKey: 'k', fetch: f.impl });
+    const jobs = await mnml.renders.createAndWait({ prompt: 'x' });
+    expect(jobs).toEqual([done]);
+    expect(f.calls).toHaveLength(1);
+    expect(f.calls[0]!.url).toBe('https://api.mnml.ai/v1/renders?wait=90');
+    await mnml.renders.create({ prompt: 'x' }, { wait: 30 });
+    expect(f.calls[1]!.url).toBe('https://api.mnml.ai/v1/renders?wait=30');
+  });
+
   it('starts an edit and returns the settled job', async () => {
     const f = fakeFetch([
       ok({ id: '5', status: 'queued', credits_charged: 1, replayed: false, notes: [] }, 202),
@@ -248,7 +326,7 @@ describe('Mnml', () => {
       prompt: 'Dark brick',
     });
     expect(job).toMatchObject({ id: '5', status: 'failed' });
-    expect(f.calls[1]!.url).toBe('https://api.mnml.ai/v1/jobs/5');
+    expect(f.calls[1]!.url).toBe('https://api.mnml.ai/v1/jobs/5?wait=90');
   });
 
   it('downloads an output without sending the key', async () => {

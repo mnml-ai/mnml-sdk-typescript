@@ -55,11 +55,28 @@ export type CameraMovement = 'static' | 'auto' | CameraMove | `${CameraMove},${C
 /** How much moves in the scene. `subtle` is the default; `auto` lets the prompt decide. */
 export type VideoMotion = 'subtle' | 'balanced' | 'dynamic' | 'auto';
 
-/** Where an image comes from: one of your uploads, a public URL, or a finished job. */
-export type Source = { upload_id: string } | { image_url: string } | { job_id: string };
+/**
+ * An image, sent in the same call that uses it, up to 15 MB: a public
+ * `https://` link, a `data:image/…;base64,` URI or base64 text, or the bytes
+ * themselves (a `Uint8Array` or Node `Buffer`, an `ArrayBuffer`, a `Blob` or
+ * `File`). The client sends bytes as base64.
+ */
+export type ImageInput = string | Uint8Array | ArrayBuffer | Blob;
+
+/**
+ * Where an image comes from: the image itself, one of your uploads (to send
+ * one image once for several calls), or a finished job.
+ */
+export type Source =
+  | { image: ImageInput }
+  | { upload_id: string }
+  | { job_id: string }
+  /** @deprecated The same as `image`, under its first name. */
+  | { image_url: string };
 
 export type ReferenceMode = 'auto' | 'style' | 'material' | 'atmosphere' | 'color' | 'geometry';
-export type Reference = Source & { mode?: ReferenceMode };
+/** Just the image (taken in the default mode), or a source with its mode. */
+export type Reference = ImageInput | (Source & { mode?: ReferenceMode });
 
 /** An area of the image, in fractions (0–1) from its top-left corner. */
 export type Region =
@@ -96,7 +113,9 @@ export type CreateEdit = Common &
     mode?: Mode;
     references?: Reference[];
     region?: Region;
-    /** An upload made with `purpose: 'mask'`: white is the area to change. */
+    /** A PNG the size of the image, white where to change, black where to keep. */
+    mask?: ImageInput;
+    /** The same mask, uploaded once with `purpose: 'mask'` to use in several calls. */
     mask_upload_id?: string;
   };
 
@@ -122,8 +141,8 @@ export type CreateVideo = Common &
     motion?: VideoMotion;
     /** What should happen in the clip, in plain words. */
     prompt?: string;
-    /** A last frame to move towards. */
-    end_frame?: Source;
+    /** A last frame to move towards: the image itself, or a source. */
+    end_frame?: ImageInput | Source;
     /** v1.1 only: the Cinematic variant, which needs `end_frame`. */
     cinematic?: boolean;
   };
@@ -141,6 +160,11 @@ export interface JobStarted {
 export interface RenderStarted extends JobStarted {
   /** Every job the call started; `id` is the first. */
   ids: string[];
+  /**
+   * Only with `wait`: every job as `jobs.get` reads it, outputs included. Each
+   * one settled when the wait ended; otherwise some are still running.
+   */
+  jobs?: Job[];
 }
 
 export type JobStatus = 'queued' | 'processing' | 'succeeded' | 'failed' | 'canceled';

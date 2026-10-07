@@ -1,4 +1,5 @@
 import { MnmlError, MnmlTimeoutError, type MnmlIssue } from './errors.js';
+import { encodeImages } from './images.js';
 import type {
   Account,
   CreateEdit,
@@ -41,8 +42,27 @@ export interface RequestOptions {
   signal?: AbortSignal;
 }
 
+export interface RenderOptions extends RequestOptions {
+  /**
+   * Hold the answer up to this many seconds (1–90) while the render runs: the
+   * answer's `jobs` then carry the outputs, with no polling. Still running when
+   * the time is up, they carry the jobs as they stand.
+   */
+  wait?: number;
+}
+
+export interface ReadOptions {
+  /** Hold the read up to this many seconds (1–90): it answers as soon as the job settles. */
+  wait?: number;
+  signal?: AbortSignal;
+}
+
 export interface WaitOptions {
-  /** Between reads, in milliseconds. Default 3 000 (use more for video). */
+  /**
+   * The least time between two reads, in milliseconds. Default 3 000. Each
+   * read is held by the API until the job settles (up to 90 s), so this only
+   * spaces reads the API answered early.
+   */
   intervalMs?: number;
   /** Give up after this long, in milliseconds. Default 10 minutes. */
   timeoutMs?: number;
@@ -65,6 +85,8 @@ const RETRYABLE = new Set([429, 500, 502, 503, 504]);
 /** A longer `Retry-After` (a daily limit runs to midnight UTC) is the caller's to handle. */
 const MAX_RETRY_AFTER_MS = 60_000;
 const TERMINAL = new Set(['succeeded', 'failed', 'canceled']);
+/** The longest the API holds an answer (`?wait`): under Cloudflare's 100-second limit. */
+const MAX_WAIT_SECONDS = 90;
 
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise<void>((resolve, reject) => {
@@ -130,7 +152,10 @@ function backoff(attempt: number): number {
  *
  * ```ts
  * const mnml = new Mnml();
- * const { id } = await mnml.renders.create({ prompt: 'Timber facade, dusk', image_url });
+ * const { id } = await mnml.renders.create({
+ *   prompt: 'Timber facade, dusk',
+ *   image: await readFile('house.jpg'), // or a link, or base64
+ * });
  * const job = await mnml.jobs.wait(id);
  * console.log(job.outputs[0]?.url);
  * ```
@@ -156,35 +181,60 @@ export class Mnml {
 
   /** Renders from a source image or a prompt alone. `count` starts several jobs at once. */
   readonly renders = {
-    create: (body: CreateRender, opts?: RequestOptions) =>
-      this.request<RenderStarted>('POST', '/v1/renders', { json: body, ...opts }),
-    /** Starts the render and waits for every job it started (one per `count`). */
+    create: async (body: CreateRender, opts: RenderOptions = {}) => {
+      const { wait, ...rest } = opts;
+      return this.request<RenderStarted>(
+        'POST',
+        wait ? `/v1/renders?wait=${wait}` : '/v1/renders',
+        {
+          json: await encodeImages(body),
+          ...rest,
+          // A held answer must not trip the client's own timeout.
+          ...(wait ? { timeoutMs: this.timeoutMs + wait * 1000 } : {}),
+        },
+      );
+    },
+    /**
+     * Starts the render and waits for every job it started (one per `count`).
+     * The API holds the first answer while it runs, so most renders come back
+     * without a single poll; anything still running is polled from there.
+     */
     createAndWait: async (body: CreateRender, opts: CreateAndWaitOptions = {}): Promise<Job[]> => {
-      const started = await this.renders.create(body, startOptions(opts));
+      const started = await this.renders.create(body, {
+        ...startOptions(opts),
+        wait: MAX_WAIT_SECONDS,
+      });
+      const jobs = started.jobs ?? [];
+      if (jobs.length === started.ids.length && jobs.every((j) => TERMINAL.has(j.status))) {
+        return jobs;
+      }
       return this.jobs.waitAll(started.ids, opts);
     },
   };
 
   /** Prompt edits and erasing, over the whole image or a region. */
   readonly edits = {
-    create: (body: CreateEdit, opts?: RequestOptions) =>
-      this.request<JobStarted>('POST', '/v1/edits', { json: body, ...opts }),
+    create: async (body: CreateEdit, opts?: RequestOptions) =>
+      this.request<JobStarted>('POST', '/v1/edits', { json: await encodeImages(body), ...opts }),
     createAndWait: async (body: CreateEdit, opts: CreateAndWaitOptions = {}): Promise<Job> =>
       this.jobs.wait((await this.edits.create(body, startOptions(opts))).id, opts),
   };
 
   /** Upscale, enhance, background removal and outpainting. */
   readonly enhancements = {
-    create: (body: CreateEnhancement, opts?: RequestOptions) =>
-      this.request<JobStarted>('POST', '/v1/enhancements', { json: body, ...opts }),
+    create: async (body: CreateEnhancement, opts?: RequestOptions) =>
+      this.request<JobStarted>('POST', '/v1/enhancements', {
+        json: await encodeImages(body),
+        ...opts,
+      }),
     createAndWait: async (body: CreateEnhancement, opts: CreateAndWaitOptions = {}): Promise<Job> =>
       this.jobs.wait((await this.enhancements.create(body, startOptions(opts))).id, opts),
   };
 
   /** Video from a still image. A clip takes minutes: wait with a longer `intervalMs`. */
   readonly videos = {
-    create: (body: CreateVideo, opts?: RequestOptions) =>
-      this.request<JobStarted>('POST', '/v1/videos', { json: body, ...opts }),
+    create: async (body: CreateVideo, opts?: RequestOptions) =>
+      this.request<JobStarted>('POST', '/v1/videos', { json: await encodeImages(body), ...opts }),
     createAndWait: async (body: CreateVideo, opts: CreateAndWaitOptions = {}): Promise<Job> =>
       this.jobs.wait((await this.videos.create(body, startOptions(opts))).id, {
         intervalMs: 10_000,
@@ -193,7 +243,10 @@ export class Mnml {
       }),
   };
 
-  /** Upload an image (or have the API fetch a public URL) to use as a source. */
+  /**
+   * Upload an image (or have the API fetch a public URL) to use in several
+   * calls by `upload_id`. Optional: every create call takes its `image` inline.
+   */
   readonly uploads = {
     create: (input: UploadInput, opts?: RequestOptions) => {
       if ('url' in input) {
@@ -208,20 +261,38 @@ export class Mnml {
   };
 
   readonly jobs = {
-    get: (id: string, opts?: RequestOptions) =>
-      this.request<Job>('GET', `/v1/jobs/${encodeURIComponent(id)}`, opts),
+    get: (id: string, opts: ReadOptions = {}) => {
+      const { wait, signal } = opts;
+      const path = `/v1/jobs/${encodeURIComponent(id)}`;
+      return this.request<Job>('GET', wait ? `${path}?wait=${wait}` : path, {
+        ...(signal ? { signal } : {}),
+        // A held answer must not trip the client's own timeout.
+        ...(wait ? { timeoutMs: this.timeoutMs + wait * 1000 } : {}),
+      });
+    },
     /** Cancels a job; one cancelled before it produced anything is refunded. */
     cancel: (id: string, opts?: RequestOptions) =>
       this.request<JobCanceled>('POST', `/v1/jobs/${encodeURIComponent(id)}/cancel`, opts),
-    /** Reads the job until it succeeds, fails or is cancelled, and returns it. */
+    /**
+     * Reads the job until it succeeds, fails or is cancelled, and returns it.
+     * Each read asks the API to hold it until the job settles, so a render
+     * usually takes one read, not a loop of quick polls.
+     */
     wait: async (id: string, opts: WaitOptions = {}): Promise<Job> => {
       const interval = opts.intervalMs ?? 3000;
       const deadline = Date.now() + (opts.timeoutMs ?? 10 * 60_000);
       for (;;) {
-        const job = await this.jobs.get(id, opts.signal ? { signal: opts.signal } : undefined);
+        const left = Math.floor((deadline - Date.now()) / 1000);
+        const began = Date.now();
+        const job = await this.jobs.get(id, {
+          ...(left >= 1 ? { wait: Math.min(MAX_WAIT_SECONDS, left) } : {}),
+          ...(opts.signal ? { signal: opts.signal } : {}),
+        });
         if (TERMINAL.has(job.status)) return job;
         if (Date.now() + interval > deadline) throw new MnmlTimeoutError(id);
-        await sleep(interval, opts.signal);
+        // Answered early, still running: space the next read.
+        const pause = interval - (Date.now() - began);
+        if (pause > 0) await sleep(pause, opts.signal);
       }
     },
     /** `wait` for several jobs at once, such as every id a render with `count` started. */
@@ -273,7 +344,7 @@ export class Mnml {
   private async request<T>(
     method: 'GET' | 'POST',
     path: string,
-    opts: RequestOptions & { json?: unknown; form?: FormData } = {},
+    opts: RequestOptions & { json?: unknown; form?: FormData; timeoutMs?: number } = {},
   ): Promise<T> {
     const headers: Record<string, string> = {
       ...this.baseHeaders(),
@@ -291,6 +362,7 @@ export class Mnml {
       `${this.baseUrl}${path}`,
       { method, headers, ...(body !== undefined ? { body } : {}) },
       opts.signal,
+      opts.timeoutMs,
     );
     const json = (await res.json().catch(() => null)) as Envelope<T> | null;
     if (res.ok && json?.success) return json.data as T;
@@ -302,9 +374,14 @@ export class Mnml {
    * is sent again (the same headers, so the same idempotency key) after
    * `Retry-After` or a backoff. The last answer is returned, whatever it is.
    */
-  private async send(url: string, init: RequestInit, signal?: AbortSignal): Promise<Response> {
+  private async send(
+    url: string,
+    init: RequestInit,
+    signal?: AbortSignal,
+    timeoutMs = this.timeoutMs,
+  ): Promise<Response> {
     for (let attempt = 0; ; attempt += 1) {
-      const timeout = withTimeout(this.timeoutMs, signal);
+      const timeout = withTimeout(timeoutMs, signal);
       let res: Response;
       try {
         res = await this.fetchImpl(url, { ...init, signal: timeout.signal });
