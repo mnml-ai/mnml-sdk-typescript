@@ -112,6 +112,7 @@ describe('the SDK covers the spec', () => {
         engine: 1,
         mode: 1,
         upload_id: 1,
+        image: 1,
         image_url: 1,
         job_id: 1,
         references: 1,
@@ -127,12 +128,14 @@ describe('the SDK covers the spec', () => {
         kind: 1,
         prompt: 1,
         upload_id: 1,
+        image: 1,
         image_url: 1,
         job_id: 1,
         engine: 1,
         mode: 1,
         references: 1,
         region: 1,
+        mask: 1,
         mask_upload_id: 1,
         webhook_url: 1,
       }),
@@ -141,6 +144,7 @@ describe('the SDK covers the spec', () => {
       keys<CreateEnhancement>({
         kind: 1,
         upload_id: 1,
+        image: 1,
         image_url: 1,
         job_id: 1,
         creativity: 1,
@@ -152,6 +156,7 @@ describe('the SDK covers the spec', () => {
     expect(
       keys<CreateVideo>({
         upload_id: 1,
+        image: 1,
         image_url: 1,
         job_id: 1,
         model: 1,
@@ -286,7 +291,9 @@ describe('the SDK covers the spec', () => {
         color: 1,
         geometry: 1,
       }),
-    ).toEqual(enumOf(render['references']!.items!.properties!['mode']!));
+    ).toEqual(
+      enumOf(render['references']!.items!.anyOf!.find((m) => m.properties)!.properties!['mode']!),
+    );
     expect(
       members<EnhancementKind>({ upscale: 1, enhance: 1, 'bg-remove': 1, outpaint: 1 }),
     ).toEqual(enumOf(body('createEnhancement').properties!['kind']!));

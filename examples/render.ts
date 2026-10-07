@@ -10,7 +10,7 @@ try {
   const [job] = await mnml.renders.createAndWait({
     mode: 'exterior',
     engine: 'v4.6-ultra',
-    image_url: 'https://developers.mnml.ai/sdk/input-model.webp',
+    image: 'https://developers.mnml.ai/sdk/input-model.webp', // or await readFile('model.png')
     prompt: 'Timber facade, late afternoon light, olive trees',
   });
   if (job?.status === 'succeeded') {

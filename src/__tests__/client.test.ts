@@ -53,7 +53,7 @@ describe('Mnml', () => {
     const mnml = new Mnml({ apiKey: 'mk_live_x', fetch: f.impl });
     const started = await mnml.renders.create({
       prompt: 'Timber facade',
-      image_url: 'https://e.com/a.png',
+      image: 'https://e.com/a.png',
     });
     expect(started.credits_charged).toBe(25);
     const [call] = f.calls;
@@ -61,10 +61,47 @@ describe('Mnml', () => {
     expect(header(call!, 'authorization')).toBe('Bearer mk_live_x');
     expect(JSON.parse(call!.init.body as string)).toEqual({
       prompt: 'Timber facade',
-      image_url: 'https://e.com/a.png',
+      image: 'https://e.com/a.png',
     });
     expect(header(call!, 'idempotency-key')).toMatch(/^[0-9a-f-]{36}$/);
     expect(header(call!, 'user-agent')).toMatch(/^mnml-sdk-typescript\/\d+\.\d+\.\d+$/);
+  });
+
+  it('sends bytes as a base64 data URI, and a string as it is', async () => {
+    const started = { id: '1', status: 'queued', credits_charged: 25, replayed: false, notes: [] };
+    const f = fakeFetch([ok({ ...started, ids: ['1'] }, 202), ok(started, 202), ok(started, 202)]);
+    const mnml = new Mnml({ apiKey: 'k', fetch: f.impl });
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
+    const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 4, 5]);
+    const b64 = (b: Uint8Array) => Buffer.from(b).toString('base64');
+    await mnml.renders.create({
+      prompt: 'Timber facade',
+      image: png,
+      references: [
+        'https://e.com/ref.png',
+        new Blob([jpeg]),
+        { image: jpeg.buffer, mode: 'material' },
+      ],
+    });
+    expect(JSON.parse(f.calls[0]!.init.body as string)).toEqual({
+      prompt: 'Timber facade',
+      image: `data:image/png;base64,${b64(png)}`,
+      references: [
+        'https://e.com/ref.png',
+        `data:image/jpeg;base64,${b64(jpeg)}`,
+        { image: `data:image/jpeg;base64,${b64(jpeg)}`, mode: 'material' },
+      ],
+    });
+    await mnml.edits.create({ image: 'https://e.com/a.png', prompt: 'A green roof', mask: png });
+    expect(JSON.parse(f.calls[1]!.init.body as string)).toMatchObject({
+      image: 'https://e.com/a.png',
+      mask: `data:image/png;base64,${b64(png)}`,
+    });
+    await mnml.videos.create({ job_id: '12', end_frame: Buffer.from(jpeg) });
+    expect(JSON.parse(f.calls[2]!.init.body as string)).toEqual({
+      job_id: '12',
+      end_frame: `data:image/jpeg;base64,${b64(jpeg)}`,
+    });
   });
 
   it('sends no idempotency key on a read', async () => {

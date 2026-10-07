@@ -26,7 +26,7 @@ const mnml = new Mnml(); // reads MNML_API_KEY
 
 const [job] = await mnml.renders.createAndWait({
   mode: 'exterior',
-  image_url: 'https://example.com/massing.png',
+  image: 'https://example.com/massing.png', // or the file's bytes: await readFile('massing.png')
   prompt: 'Timber facade, late afternoon light, olive trees',
 });
 console.log(job?.status, job?.outputs[0]?.url);
@@ -56,7 +56,7 @@ site's origins on the [API keys](https://developers.mnml.ai/console/keys) page.
 | `edits.create(body)`                   | `POST /v1/edits`            | Edit or erase, over the whole image or a region     |
 | `enhancements.create(body)`            | `POST /v1/enhancements`     | Upscale, enhance, remove the background, outpaint   |
 | `videos.create(body)`                  | `POST /v1/videos`           | Video from a still                                  |
-| `uploads.create(input)`                | `POST /v1/uploads`          | Upload an image to use as a source or mask          |
+| `uploads.create(input)`                | `POST /v1/uploads`          | Optional: one image reused across calls             |
 | `jobs.get(id)`                         | `GET /v1/jobs/{id}`         | Read a job                                          |
 | `jobs.cancel(id)`                      | `POST /v1/jobs/{id}/cancel` | Cancel a job (refunded if it had not produced yet)  |
 | `account.get()`                        | `GET /v1/account`           | Balance, tier and limits for this key               |
@@ -81,24 +81,41 @@ const { engines, video_models } = await mnml.engines.list();
 for (const e of engines) console.log(e.id, e.prices.render, e.capabilities.max_references);
 ```
 
-### Sources
+### Images
 
-A source image is one of your uploads, a public URL, or a finished job:
-
-```ts
-await mnml.renders.create({ upload_id: upload.id, prompt: 'Brick and glass, dusk' });
-await mnml.renders.create({
-  image_url: 'https://example.com/plan.png',
-  prompt: 'Brick and glass, dusk',
-});
-await mnml.edits.create({ job_id: id, prompt: 'Dark brick instead of render' });
-```
-
-### Uploads
+Send the image in the same call, with no upload step. `image` takes a public link, a
+`data:image/…;base64,` URI or base64 text, or the bytes themselves (a `Buffer` or
+`Uint8Array`, an `ArrayBuffer`, a `Blob` or `File`). JPEG, PNG or WebP, up to 15 MB:
 
 ```ts
 import { readFile } from 'node:fs/promises';
 
+await mnml.renders.create({ image: await readFile('plan.png'), prompt: 'Brick and glass, dusk' });
+await mnml.renders.create({
+  image: 'https://example.com/plan.png',
+  prompt: 'Brick and glass, dusk',
+});
+await mnml.edits.create({ job_id: id, prompt: 'Dark brick instead of render' }); // a finished job
+```
+
+References, an edit's `mask` and a video's `end_frame` take an image the same way:
+
+```ts
+await mnml.renders.create({
+  image: await readFile('massing.png'),
+  prompt: 'Concrete and glass, overcast',
+  references: [
+    await readFile('material-board.jpg'),
+    { image: 'https://example.com/mood.jpg', mode: 'atmosphere' },
+  ],
+});
+```
+
+### Uploads (optional)
+
+To use one image in many calls, upload it once and pass its `upload_id`:
+
+```ts
 const upload = await mnml.uploads.create({
   file: await readFile('massing.png'),
   filename: 'massing.png',
@@ -171,7 +188,7 @@ A refusal throws `MnmlError`, carrying the API's `code`, the HTTP `status` and t
 import { MnmlError } from '@mnml-ai/sdk';
 
 try {
-  await mnml.renders.create({ image_url, prompt });
+  await mnml.renders.create({ image, prompt });
 } catch (err) {
   if (err instanceof MnmlError && err.code === 'INSUFFICIENT_CREDITS') {
     // Top up, then send it again.
@@ -252,15 +269,15 @@ old route has a v1 call that does the same job:
 | `style/transfer`                                              | `renders.create({ references: [{ …, mode: 'style' }], … })`   |
 | `imagine-ai`                                                  | `renders.create({ mode: 'text-to-render', prompt })`          |
 | `virtual-staging-ai` (v1 and v2)                              | `renders.create({ mode: 'interior', … })`                     |
-| `inpaint`                                                     | `edits.create({ prompt, mask_upload_id })` or `region`        |
+| `inpaint`                                                     | `edits.create({ prompt, mask })` or `region`                  |
 | `ai-eraser`                                                   | `edits.create({ kind: 'erase', region })`                     |
 | `upscale`, `render/enhancer`                                  | `enhancements.create({ kind: 'upscale' })`, `kind: 'enhance'` |
 | `video-v20-flash`, `video-v20-cinematic`, `video-ai`          | `videos.create({ model: 'v2.0-flash' })`, `'v2.0'`, `'v1.1'`  |
 | `status/{id}` (v1 and v2)                                     | `jobs.get(id)` or `jobs.wait(id)`                             |
 | `credits`                                                     | `account.get()`                                               |
 
-v3 sent the image in the request; v1 takes an `upload_id` (from `uploads.create`), a public
-`image_url` or a finished `job_id`. The full guide is at
+v1 takes the image in the request too, as `image`: its bytes, a public link or base64. An
+`upload_id` (from `uploads.create`) or a finished `job_id` also works. The full guide is at
 [developers.mnml.ai/docs/migrate](https://developers.mnml.ai/docs/migrate).
 
 ## Links

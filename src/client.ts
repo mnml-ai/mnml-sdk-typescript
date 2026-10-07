@@ -1,4 +1,5 @@
 import { MnmlError, MnmlTimeoutError, type MnmlIssue } from './errors.js';
+import { encodeImages } from './images.js';
 import type {
   Account,
   CreateEdit,
@@ -130,7 +131,10 @@ function backoff(attempt: number): number {
  *
  * ```ts
  * const mnml = new Mnml();
- * const { id } = await mnml.renders.create({ prompt: 'Timber facade, dusk', image_url });
+ * const { id } = await mnml.renders.create({
+ *   prompt: 'Timber facade, dusk',
+ *   image: await readFile('house.jpg'), // or a link, or base64
+ * });
  * const job = await mnml.jobs.wait(id);
  * console.log(job.outputs[0]?.url);
  * ```
@@ -156,8 +160,11 @@ export class Mnml {
 
   /** Renders from a source image or a prompt alone. `count` starts several jobs at once. */
   readonly renders = {
-    create: (body: CreateRender, opts?: RequestOptions) =>
-      this.request<RenderStarted>('POST', '/v1/renders', { json: body, ...opts }),
+    create: async (body: CreateRender, opts?: RequestOptions) =>
+      this.request<RenderStarted>('POST', '/v1/renders', {
+        json: await encodeImages(body),
+        ...opts,
+      }),
     /** Starts the render and waits for every job it started (one per `count`). */
     createAndWait: async (body: CreateRender, opts: CreateAndWaitOptions = {}): Promise<Job[]> => {
       const started = await this.renders.create(body, startOptions(opts));
@@ -167,24 +174,27 @@ export class Mnml {
 
   /** Prompt edits and erasing, over the whole image or a region. */
   readonly edits = {
-    create: (body: CreateEdit, opts?: RequestOptions) =>
-      this.request<JobStarted>('POST', '/v1/edits', { json: body, ...opts }),
+    create: async (body: CreateEdit, opts?: RequestOptions) =>
+      this.request<JobStarted>('POST', '/v1/edits', { json: await encodeImages(body), ...opts }),
     createAndWait: async (body: CreateEdit, opts: CreateAndWaitOptions = {}): Promise<Job> =>
       this.jobs.wait((await this.edits.create(body, startOptions(opts))).id, opts),
   };
 
   /** Upscale, enhance, background removal and outpainting. */
   readonly enhancements = {
-    create: (body: CreateEnhancement, opts?: RequestOptions) =>
-      this.request<JobStarted>('POST', '/v1/enhancements', { json: body, ...opts }),
+    create: async (body: CreateEnhancement, opts?: RequestOptions) =>
+      this.request<JobStarted>('POST', '/v1/enhancements', {
+        json: await encodeImages(body),
+        ...opts,
+      }),
     createAndWait: async (body: CreateEnhancement, opts: CreateAndWaitOptions = {}): Promise<Job> =>
       this.jobs.wait((await this.enhancements.create(body, startOptions(opts))).id, opts),
   };
 
   /** Video from a still image. A clip takes minutes: wait with a longer `intervalMs`. */
   readonly videos = {
-    create: (body: CreateVideo, opts?: RequestOptions) =>
-      this.request<JobStarted>('POST', '/v1/videos', { json: body, ...opts }),
+    create: async (body: CreateVideo, opts?: RequestOptions) =>
+      this.request<JobStarted>('POST', '/v1/videos', { json: await encodeImages(body), ...opts }),
     createAndWait: async (body: CreateVideo, opts: CreateAndWaitOptions = {}): Promise<Job> =>
       this.jobs.wait((await this.videos.create(body, startOptions(opts))).id, {
         intervalMs: 10_000,
@@ -193,7 +203,10 @@ export class Mnml {
       }),
   };
 
-  /** Upload an image (or have the API fetch a public URL) to use as a source. */
+  /**
+   * Upload an image (or have the API fetch a public URL) to use in several
+   * calls by `upload_id`. Optional: every create call takes its `image` inline.
+   */
   readonly uploads = {
     create: (input: UploadInput, opts?: RequestOptions) => {
       if ('url' in input) {
