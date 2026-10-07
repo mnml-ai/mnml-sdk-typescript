@@ -63,6 +63,7 @@ site's origins on the [API keys](https://developers.mnml.ai/console/keys) page.
 | `files.download(output)`               | `GET /v2/files/{id}`        | A job output's bytes, from its signed link          |
 | `jobs.wait(id, options?)`              | `GET /v2/jobs/{id}`         | Read a job until it succeeds, fails or is cancelled |
 | `jobs.waitAll(ids, options?)`          | `GET /v2/jobs/{id}`         | `wait` for several jobs at once                     |
+| `jobs.stream(id, options?)`            | `GET /v2/jobs/{id}/events`  | Follow a job as it changes, over one connection     |
 | `<resource>.createAndWait(body, opt?)` | the create, then the job    | Start a job and wait for it (a render: every job)   |
 
 Every method returns the answer's `data`, and takes an optional last argument
@@ -158,6 +159,24 @@ const job = await mnml.jobs.wait(id, { intervalMs: 3000, timeoutMs: 10 * 60_000 
 `jobs.wait` throws `MnmlTimeoutError` when its own time runs out. The job keeps running, so
 read it again later. `videos.createAndWait` reads every 10 seconds for up to 20 minutes unless
 you say otherwise. For long jobs such as video, a [webhook](#webhooks) beats polling.
+
+### Following a job as it runs
+
+`jobs.stream` follows one job over a single connection (Server-Sent Events) for up to ten
+minutes: each change of the job, then one last event, after which the loop ends. It suits a long
+job in a script with no server to take a webhook.
+
+```ts
+for await (const event of mnml.jobs.stream(id)) {
+  if (event.type === 'job') console.log(event.job.status); // as it changes
+  if (event.type === 'done') console.log(event.job.outputs[0]?.url); // settled
+  if (event.type === 'timeout') break; // still running after ten minutes: stream it again
+  if (event.type === 'error') console.warn(event.error.message); // the job still runs
+}
+```
+
+Breaking out of the loop, or aborting `options.signal`, hangs up; the job keeps running. A
+connection that drops before the last event throws `MnmlError` with `STREAM_ENDED`.
 
 ### Downloading outputs
 

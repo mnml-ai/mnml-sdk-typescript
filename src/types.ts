@@ -188,6 +188,16 @@ export interface Job {
   completed_at: string | null;
 }
 
+/**
+ * One event of `jobs.stream`: the job as it stands (`job`), then exactly one
+ * last event, after which the stream ends: `done` (the job settled),
+ * `timeout` (still running after ten minutes: open the stream again) or
+ * `error` (the API could not read the job; it still runs).
+ */
+export type JobEvent =
+  | { type: 'job' | 'done' | 'timeout'; job: Job }
+  | { type: 'error'; error: { code: string; message: string } };
+
 export interface JobCanceled {
   id: string;
   outcome: 'refunded' | 'requested' | 'too-late' | 'already-settled';

@@ -339,3 +339,102 @@ describe('Mnml', () => {
     });
   });
 });
+
+describe('jobs.stream', () => {
+  /** An SSE answer whose body arrives in the given chunks, as a network would split it. */
+  const sse = (chunks: string[], status = 200) => {
+    const encoder = new TextEncoder();
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const c of chunks) controller.enqueue(encoder.encode(c));
+        controller.close();
+      },
+    });
+    return new Response(body, {
+      status,
+      headers: { 'content-type': 'text/event-stream', 'x-request-id': 'req_3' },
+    });
+  };
+  const job = (status: string) => ({ id: '9', status, outputs: [] });
+  const collect = async <T>(it: AsyncIterable<T>) => {
+    const out: T[] = [];
+    for await (const e of it) out.push(e);
+    return out;
+  };
+
+  it('yields the job as it changes, then done, across split chunks, pings and CRLF', async () => {
+    const f = fakeFetch([
+      sse([
+        `event: job\ndata: ${JSON.stringify(job('queued'))}\n\n: ping\n\n`,
+        `event: job\r\ndata: ${JSON.stringify(job('processing')).slice(0, 12)}`,
+        `${JSON.stringify(job('processing')).slice(12)}\r\n\r\n`,
+        `event: done\ndata: ${JSON.stringify(job('succeeded'))}\n\n`,
+      ]),
+    ]);
+    const mnml = new Mnml({ apiKey: 'k', fetch: f.impl });
+    const events = await collect(mnml.jobs.stream('9'));
+    expect(events.map((e) => [e.type, e.type === 'error' ? null : e.job.status])).toEqual([
+      ['job', 'queued'],
+      ['job', 'processing'],
+      ['done', 'succeeded'],
+    ]);
+    expect(f.calls[0]!.url).toBe('https://api.mnml.ai/v2/jobs/9/events');
+    expect(header(f.calls[0]!, 'accept')).toBe('text/event-stream');
+  });
+
+  it('ends at once on a job already settled, and on an error event', async () => {
+    const f = fakeFetch([
+      sse([`event: done\ndata: ${JSON.stringify(job('failed'))}\n\n`]),
+      sse([
+        `event: job\ndata: ${JSON.stringify(job('processing'))}\n\n`,
+        'event: error\ndata: {"code":"READ_FAILED","message":"Try again."}\n\n',
+      ]),
+    ]);
+    const mnml = new Mnml({ apiKey: 'k', fetch: f.impl });
+    expect((await collect(mnml.jobs.stream('9'))).map((e) => e.type)).toEqual(['done']);
+    const events = await collect(mnml.jobs.stream('9'));
+    expect(events.at(-1)).toEqual({
+      type: 'error',
+      error: { code: 'READ_FAILED', message: 'Try again.' },
+    });
+  });
+
+  it('throws the refusal before the stream starts, and STREAM_ENDED when it is cut short', async () => {
+    const f = fakeFetch([
+      fail(404, 'NOT_FOUND'),
+      sse([`event: job\ndata: ${JSON.stringify(job('processing'))}\n\n`]),
+    ]);
+    const mnml = new Mnml({ apiKey: 'k', fetch: f.impl, maxRetries: 0 });
+    await expect(collect(mnml.jobs.stream('9'))).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(collect(mnml.jobs.stream('9'))).rejects.toMatchObject({ code: 'STREAM_ENDED' });
+  });
+
+  it('hangs up when the caller aborts', async () => {
+    const encoder = new TextEncoder();
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(
+          encoder.encode(`event: job\ndata: ${JSON.stringify(job('processing'))}\n\n`),
+        );
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const f = fakeFetch([new Response(body, { status: 200 })]);
+    const mnml = new Mnml({ apiKey: 'k', fetch: f.impl });
+    const controller = new AbortController();
+    const seen: string[] = [];
+    await expect(
+      (async () => {
+        for await (const e of mnml.jobs.stream('9', { signal: controller.signal })) {
+          seen.push(e.type);
+          controller.abort(new Error('stop'));
+        }
+      })(),
+    ).rejects.toThrow('stop');
+    expect(seen).toEqual(['job']);
+    expect(cancelled).toBe(true);
+  });
+});

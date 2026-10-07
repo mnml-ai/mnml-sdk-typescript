@@ -92,21 +92,15 @@ const COVERED: Record<string, string> = {
   createEnhancement: 'enhancements.create',
   createVideo: 'videos.create',
   getJob: 'jobs.get',
+  streamJob: 'jobs.stream',
   cancelJob: 'jobs.cancel',
 };
 /** Not client calls: the spec itself, and the signed output link a job hands back. */
 const NOT_CALLS = new Set(['getOpenApi', 'getJobFile']);
-/**
- * Calls the SDK does not have yet, each named on purpose: `streamJob` is the
- * job as server-sent events; `jobs.wait` already holds the read server-side.
- */
-const NOT_YET = new Set(['streamJob']);
 
 describe('the SDK covers the spec', () => {
   it('has a method for every core operation', () => {
-    const core = ops.filter(
-      (o) => !o['x-mnml-legacy'] && !NOT_CALLS.has(o.operationId) && !NOT_YET.has(o.operationId),
-    );
+    const core = ops.filter((o) => !o['x-mnml-legacy'] && !NOT_CALLS.has(o.operationId));
     expect(core.map((o) => o.operationId).sort()).toEqual(Object.keys(COVERED).sort());
   });
 

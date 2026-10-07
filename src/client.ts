@@ -9,6 +9,7 @@ import type {
   Engines,
   Job,
   JobCanceled,
+  JobEvent,
   JobOutput,
   JobStarted,
   RenderStarted,
@@ -248,6 +249,21 @@ export class Mnml {
         ...(wait ? { timeoutMs: this.timeoutMs + wait * 1000 } : {}),
       });
     },
+    /**
+     * Follows a job as it runs, over one connection (Server-Sent Events): each
+     * change of the job, then one last event (`done`, `timeout` or `error`),
+     * after which the iteration ends. For a job that outlasts a held read, in
+     * a script with no server to take a webhook. Stopping the loop, or the
+     * signal, hangs up; the job keeps running.
+     *
+     * ```ts
+     * for await (const event of mnml.jobs.stream(id)) {
+     *   if (event.type === 'done') console.log(event.job.outputs[0]?.url);
+     * }
+     * ```
+     */
+    stream: (id: string, opts: { signal?: AbortSignal } = {}): AsyncGenerator<JobEvent> =>
+      this.streamEvents(`/v2/jobs/${encodeURIComponent(id)}/events`, opts.signal),
     /** Cancels a job; one cancelled before it produced anything is refunded. */
     cancel: (id: string, opts?: RequestOptions) =>
       this.request<JobCanceled>('POST', `/v2/jobs/${encodeURIComponent(id)}/cancel`, opts),
@@ -348,6 +364,59 @@ export class Mnml {
   }
 
   /**
+   * A Server-Sent Events answer as events, until its last one. The stream is
+   * opened with the client's retries (a 429 or 5xx before it starts); a
+   * refusal throws `MnmlError`, and a connection that ends before the last
+   * event throws `MnmlError` with `STREAM_ENDED`.
+   */
+  private async *streamEvents(path: string, signal?: AbortSignal): AsyncGenerator<JobEvent> {
+    const res = await this.send(
+      `${this.baseUrl}${path}`,
+      {
+        method: 'GET',
+        headers: {
+          ...this.baseHeaders(),
+          authorization: `Bearer ${this.apiKey}`,
+          accept: 'text/event-stream',
+        },
+      },
+      signal,
+    );
+    if (!res.ok || !res.body) throw errorFrom(res, await res.json().catch(() => null));
+    const reader = res.body.getReader();
+    // `send` lets go of the caller's signal once the answer starts: hang up on it here.
+    const hangUp = () => void reader.cancel(signal?.reason).catch(() => undefined);
+    signal?.addEventListener('abort', hangUp, { once: true });
+    const decoder = new TextDecoder();
+    let buffer = '';
+    try {
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true }).replace(/\r\n?/g, '\n');
+        let end: number;
+        while ((end = buffer.indexOf('\n\n')) >= 0) {
+          const event = parseEvent(buffer.slice(0, end));
+          buffer = buffer.slice(end + 2);
+          if (!event) continue;
+          yield event;
+          if (event.type !== 'job') return;
+        }
+      }
+      if (signal?.aborted) throw signal.reason;
+      throw new MnmlError(
+        'STREAM_ENDED',
+        'The job stream ended before the job settled. Read the job, or open the stream again.',
+        res.status,
+        res.headers.get('x-request-id'),
+      );
+    } finally {
+      signal?.removeEventListener('abort', hangUp);
+      await reader.cancel().catch(() => undefined);
+    }
+  }
+
+  /**
    * One call with the client's retries: a 429, a 5xx or a dropped connection
    * is sent again (the same headers, so the same idempotency key) after
    * `Retry-After` or a backoff. The last answer is returned, whatever it is.
@@ -390,6 +459,27 @@ function startOptions(opts: CreateAndWaitOptions): RequestOptions {
     ...(opts.idempotencyKey !== undefined ? { idempotencyKey: opts.idempotencyKey } : {}),
     ...(opts.signal ? { signal: opts.signal } : {}),
   };
+}
+
+/** One Server-Sent Events block as a `JobEvent`; null for a comment (`: ping`) or an unknown event. */
+function parseEvent(block: string): JobEvent | null {
+  let type = 'message';
+  const data: string[] = [];
+  for (const line of block.split('\n')) {
+    if (line.startsWith(':')) continue;
+    const colon = line.indexOf(':');
+    const field = colon < 0 ? line : line.slice(0, colon);
+    const value = colon < 0 ? '' : line.slice(colon + 1).replace(/^ /, '');
+    if (field === 'event') type = value;
+    else if (field === 'data') data.push(value);
+  }
+  if (data.length === 0) return null;
+  const payload = JSON.parse(data.join('\n')) as unknown;
+  if (type === 'job' || type === 'done' || type === 'timeout') {
+    return { type, job: payload as Job };
+  }
+  if (type === 'error') return { type, error: payload as { code: string; message: string } };
+  return null;
 }
 
 /** The API's answer envelope: `data` on a success, `error` on a refusal. */
