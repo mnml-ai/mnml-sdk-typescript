@@ -143,7 +143,7 @@ export type CreateVideo = Common &
 
 export interface JobStarted {
   id: string;
-  status: string;
+  status: JobStatus;
   credits_charged: number;
   /** True when this answers an earlier identical request: nothing new was charged. */
   replayed: boolean;

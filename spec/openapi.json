@@ -830,7 +830,14 @@
                           }
                         },
                         "status": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "queued",
+                            "processing",
+                            "succeeded",
+                            "failed",
+                            "canceled"
+                          ]
                         },
                         "credits_charged": {
                           "type": "integer",
@@ -1021,7 +1028,14 @@
                           }
                         },
                         "status": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "queued",
+                            "processing",
+                            "succeeded",
+                            "failed",
+                            "canceled"
+                          ]
                         },
                         "credits_charged": {
                           "type": "integer",
@@ -1316,12 +1330,12 @@
                           },
                           "width": {
                             "type": "number",
-                            "exclusiveMinimum": 0,
+                            "minimum": 0.001,
                             "maximum": 1
                           },
                           "height": {
                             "type": "number",
-                            "exclusiveMinimum": 0,
+                            "minimum": 0.001,
                             "maximum": 1
                           }
                         },
@@ -1338,22 +1352,14 @@
                         "maxItems": 64,
                         "type": "array",
                         "items": {
-                          "type": "array",
-                          "prefixItems": [
-                            {
-                              "type": "number",
-                              "minimum": 0,
-                              "maximum": 1
-                            },
-                            {
-                              "type": "number",
-                              "minimum": 0,
-                              "maximum": 1
-                            }
-                          ],
-                          "items": false,
                           "minItems": 2,
-                          "maxItems": 2
+                          "maxItems": 2,
+                          "type": "array",
+                          "items": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                          }
                         }
                       }
                     },
@@ -1510,12 +1516,12 @@
                           },
                           "width": {
                             "type": "number",
-                            "exclusiveMinimum": 0,
+                            "minimum": 0.001,
                             "maximum": 1
                           },
                           "height": {
                             "type": "number",
-                            "exclusiveMinimum": 0,
+                            "minimum": 0.001,
                             "maximum": 1
                           }
                         },
@@ -1532,22 +1538,14 @@
                         "maxItems": 64,
                         "type": "array",
                         "items": {
-                          "type": "array",
-                          "prefixItems": [
-                            {
-                              "type": "number",
-                              "minimum": 0,
-                              "maximum": 1
-                            },
-                            {
-                              "type": "number",
-                              "minimum": 0,
-                              "maximum": 1
-                            }
-                          ],
-                          "items": false,
                           "minItems": 2,
-                          "maxItems": 2
+                          "maxItems": 2,
+                          "type": "array",
+                          "items": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                          }
                         }
                       }
                     },
@@ -1613,7 +1611,14 @@
                           "type": "string"
                         },
                         "status": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "queued",
+                            "processing",
+                            "succeeded",
+                            "failed",
+                            "canceled"
+                          ]
                         },
                         "credits_charged": {
                           "type": "integer",
@@ -1869,7 +1874,14 @@
                           "type": "string"
                         },
                         "status": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "queued",
+                            "processing",
+                            "succeeded",
+                            "failed",
+                            "canceled"
+                          ]
                         },
                         "credits_charged": {
                           "type": "integer",
@@ -2169,7 +2181,14 @@
                           "type": "string"
                         },
                         "status": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "queued",
+                            "processing",
+                            "succeeded",
+                            "failed",
+                            "canceled"
+                          ]
                         },
                         "credits_charged": {
                           "type": "integer",
@@ -5532,10 +5551,7 @@
                     "type": "string",
                     "format": "binary"
                   }
-                },
-                "required": [
-                  "image"
-                ]
+                }
               }
             }
           }
@@ -6310,10 +6326,7 @@
                     "type": "string",
                     "format": "binary"
                   }
-                },
-                "required": [
-                  "image"
-                ]
+                }
               }
             }
           }
@@ -6462,10 +6475,7 @@
                     "type": "string",
                     "format": "binary"
                   }
-                },
-                "required": [
-                  "image"
-                ]
+                }
               }
             }
           }
@@ -6604,6 +6614,177 @@
                     "type": "string",
                     "format": "binary"
                   }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The legacy answer.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit-Limit": {
+                "$ref": "#/components/headers/RateLimitLimit"
+              },
+              "RateLimit-Remaining": {
+                "$ref": "#/components/headers/RateLimitRemaining"
+              },
+              "RateLimit-Reset": {
+                "$ref": "#/components/headers/RateLimitReset"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/virtual-staging-ai": {
+      "post": {
+        "operationId": "legacyV1VirtualStagingAi",
+        "summary": "Legacy alias of /v2/renders. An interior render on v4.6, keeping the room. It answers with the image inline, as before, once the render is done; a render still running after 90 seconds answers its `id` to poll at `/v1/status/{id}`. It keeps its legacy price, $0.30 a render from your API wallet.",
+        "deprecated": true,
+        "x-mnml-legacy": {
+          "kind": "staging",
+          "successor": "/v2/renders",
+          "legacyCredits": "2",
+          "paidOnly": false,
+          "note": "An interior render on v4.6, keeping the room. It answers with the image inline, as before, once the render is done; a render still running after 90 seconds answers its `id` to poll at `/v1/status/{id}`. It keeps its legacy price, $0.30 a render from your API wallet.",
+          "idKey": "id",
+          "fields": [
+            {
+              "name": "image",
+              "type": "file",
+              "required": true,
+              "desc": "The empty room: JPEG, PNG or WebP."
+            },
+            {
+              "name": "prompt",
+              "type": "string",
+              "required": true,
+              "desc": "How to furnish the room, up to 2000 characters."
+            },
+            {
+              "name": "additional_prompt",
+              "type": "string",
+              "required": false,
+              "desc": "Added to the end of `prompt`."
+            },
+            {
+              "name": "roomtype",
+              "type": "string",
+              "required": false,
+              "desc": "The room to stage it as, such as `living room` or `bedroom`."
+            },
+            {
+              "name": "roomstyle",
+              "type": "string",
+              "required": false,
+              "desc": "The interior style, such as `scandinavian` or `japandi`."
+            },
+            {
+              "name": "scenario",
+              "type": "string",
+              "required": false,
+              "desc": "`creative` lets the design take liberties; anything else stages the room plainly.",
+              "values": [
+                "creative"
+              ]
+            },
+            {
+              "name": "seed",
+              "type": "integer",
+              "required": false,
+              "desc": "A whole number, 0 or more."
+            },
+            {
+              "name": "reference_image",
+              "type": "file",
+              "required": false,
+              "desc": "One style reference."
+            }
+          ],
+          "answers": [
+            {
+              "status": 200,
+              "label": "Done: `message` is the staged image, inline",
+              "body": {
+                "status": "success",
+                "message": "data:image/jpeg;base64,/9j/4AAQSkZJRg…",
+                "prompt": "Scandinavian living room",
+                "id": "218831",
+                "cost": 20
+              }
+            },
+            {
+              "status": 200,
+              "label": "Still rendering after 90 seconds: poll `GET /v1/status/{id}` with the id",
+              "body": {
+                "status": "processing",
+                "id": "218831",
+                "message": "Still rendering. Poll GET /v1/status/218831 for the image.",
+                "prompt": "Scandinavian living room",
+                "cost": 20
+              }
+            },
+            {
+              "status": 500,
+              "label": "Failed: the charge was refunded",
+              "body": {
+                "status": "error",
+                "code": "RENDER_FAILED",
+                "message": "The render did not complete. Its credits were refunded.",
+                "id": "218831"
+              }
+            },
+            {
+              "status": 400,
+              "label": "Refused: nothing was charged",
+              "body": {
+                "status": "error",
+                "code": "NO_CREDITS",
+                "message": "Not enough credits for this generation."
+              }
+            }
+          ],
+          "engine": "v4.6-ultra",
+          "mode": "interior"
+        },
+        "tags": [
+          "Legacy"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "image": {
+                    "type": "string",
+                    "format": "binary"
+                  }
                 },
                 "required": [
                   "image"
@@ -6653,96 +6834,49 @@
         }
       }
     },
-    "/v1/virtual-staging-ai": {
-      "post": {
-        "operationId": "legacyV1VirtualStagingAi",
-        "summary": "Legacy alias of /v2/renders. Retired: it answered with the image inline. Use the legacy `POST /v2/virtual-staging-ai`, which answers with a job id to poll, or `POST /v2/renders` with `mode: interior`.",
-        "deprecated": true,
-        "x-mnml-legacy": {
-          "kind": "retired",
-          "successor": "/v2/renders",
-          "legacyCredits": "2",
-          "paidOnly": false,
-          "note": "Retired: it answered with the image inline. Use the legacy `POST /v2/virtual-staging-ai`, which answers with a job id to poll, or `POST /v2/renders` with `mode: interior`.",
-          "idKey": "id",
-          "fields": [],
-          "answers": [
-            {
-              "status": 410,
-              "label": "Retired",
-              "body": {
-                "status": "error",
-                "code": "ENDPOINT_RETIRED",
-                "message": "Retired: it answered with the image inline. Use the legacy `POST /v2/virtual-staging-ai`, which answers with a job id to poll, or `POST /v2/renders` with `mode: interior`."
-              }
-            }
-          ]
-        },
-        "tags": [
-          "Legacy"
-        ],
-        "responses": {
-          "401": {
-            "$ref": "#/components/responses/Unauthenticated"
-          },
-          "410": {
-            "description": "Retired: it answered with the image inline. Use the legacy `POST /v2/virtual-staging-ai`, which answers with a job id to poll, or `POST /v2/renders` with `mode: interior`.",
-            "headers": {
-              "X-Request-Id": {
-                "$ref": "#/components/headers/RequestId"
-              },
-              "RateLimit-Limit": {
-                "$ref": "#/components/headers/RateLimitLimit"
-              },
-              "RateLimit-Remaining": {
-                "$ref": "#/components/headers/RateLimitRemaining"
-              },
-              "RateLimit-Reset": {
-                "$ref": "#/components/headers/RateLimitReset"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "propertyNames": {
-                    "type": "string"
-                  },
-                  "additionalProperties": {}
-                }
-              }
-            }
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        }
-      }
-    },
     "/v1/prompt-generator": {
       "post": {
         "operationId": "legacyV1PromptGenerator",
-        "summary": "Legacy alias of /v2/renders. Retired: there is no v4 equivalent yet.",
+        "summary": "Legacy alias of /v2/renders. The same answer: a prompt written from your image and keywords, for the current engines. It keeps its legacy price, $0.075 a call from your API wallet, charged only once the prompt is written.",
         "deprecated": true,
         "x-mnml-legacy": {
-          "kind": "retired",
+          "kind": "prompt",
           "successor": "/v2/renders",
           "legacyCredits": "0.5",
           "paidOnly": false,
-          "note": "Retired: there is no v4 equivalent yet.",
+          "note": "The same answer: a prompt written from your image and keywords, for the current engines. It keeps its legacy price, $0.075 a call from your API wallet, charged only once the prompt is written.",
           "idKey": "id",
-          "fields": [],
+          "fields": [
+            {
+              "name": "image",
+              "type": "file",
+              "required": true,
+              "desc": "The building image: JPEG, PNG, GIF or WebP, 1 KB to 15 MB."
+            },
+            {
+              "name": "prompt",
+              "type": "string",
+              "required": false,
+              "desc": "Keywords the prompt should weigh heavily, such as `warm timber, large glazing`."
+            }
+          ],
           "answers": [
             {
-              "status": 410,
-              "label": "Retired",
+              "status": 200,
+              "label": "Written: `message` is the prompt, `prompt` your keywords",
+              "body": {
+                "status": "success",
+                "message": "A two-storey house with a pitched standing-seam zinc roof, vertical larch cladding and full-height glazing set in slim black aluminium frames.",
+                "prompt": "warm timber, large glazing"
+              }
+            },
+            {
+              "status": 400,
+              "label": "Refused: nothing was charged",
               "body": {
                 "status": "error",
-                "code": "ENDPOINT_RETIRED",
-                "message": "Retired: there is no v4 equivalent yet."
+                "code": "NO_CREDITS",
+                "message": "Not enough credits for this generation."
               }
             }
           ]
@@ -6750,12 +6884,28 @@
         "tags": [
           "Legacy"
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "image": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                },
+                "required": [
+                  "image"
+                ]
+              }
+            }
+          }
+        },
         "responses": {
-          "401": {
-            "$ref": "#/components/responses/Unauthenticated"
-          },
-          "410": {
-            "description": "Retired: there is no v4 equivalent yet.",
+          "200": {
+            "description": "The legacy answer.",
             "headers": {
               "X-Request-Id": {
                 "$ref": "#/components/headers/RequestId"
@@ -6781,6 +6931,9 @@
                 }
               }
             }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
