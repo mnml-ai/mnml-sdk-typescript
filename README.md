@@ -32,8 +32,32 @@ const [job] = await mnml.renders.createAndWait({
 console.log(job?.status, job?.outputs[0]?.url);
 ```
 
-Every call spends credits from your prepaid API balance. Top it up in dollars on
+Every call is paid from your prepaid API balance, in US dollars. Top it up on
 [Billing](https://developers.mnml.ai/console/billing).
+
+### Amounts are in dollars
+
+Every amount the API answers with has a US-dollar field, a number to four decimals (`0.2475`
+is 24.75 cents):
+
+| Where                              | Dollar fields                                                |
+| ---------------------------------- | ------------------------------------------------------------ |
+| a create call (`renders.create` …) | `charged_usd`                                                |
+| `jobs.get()`                       | `charged_usd`, `refunded_usd`                                |
+| `jobs.cancel()`                    | `refunded_usd`                                               |
+| `account.get()`                    | `balance_usd`, `key.daily_limit_usd`, `limits.daily_usd`     |
+| `engines.list()`                   | `prices.render_usd`, `prices.edit_usd`, video `prices[].usd` |
+| the `credits.low` webhook          | `balance_usd`, `threshold_usd`                               |
+
+```ts
+const account = await mnml.account.get();
+console.log(`$${account.balance_usd} left`);
+```
+
+The credit fields beside them (`credits_charged`, `credits_refunded`, `credits.spendable`,
+`daily_credit_limit`, `daily_credits`, `prices.render` and `edit`, video `credits`, and the
+webhook's `balance` and `threshold`) are deprecated: your editor strikes them through, and a
+later release removes them. Read the `_usd` fields instead.
 
 ## Configuration
 
@@ -78,7 +102,8 @@ with each engine's price and what it can do:
 
 ```ts
 const { engines, video_models } = await mnml.engines.list();
-for (const e of engines) console.log(e.id, e.prices.render, e.capabilities.max_references);
+for (const e of engines)
+  console.log(e.id, `$${e.prices.render_usd}`, e.capabilities.max_references);
 ```
 
 ### Images
@@ -246,7 +271,7 @@ export async function POST(request: Request) {
   if (event.type === 'job.succeeded') {
     // event.data is the job, as jobs.get returns it
   } else if (event.type === 'credits.low') {
-    // event.data is { balance, threshold }
+    // event.data is { balance_usd, threshold_usd }, in US dollars
   }
   return new Response(null, { status: 204 });
 }
@@ -287,7 +312,7 @@ The SDK speaks API v2 only. Each old route has a v2 call that does the same job:
 | `upscale`, `render/enhancer`                                  | `enhancements.create({ kind: 'upscale' })`, `kind: 'enhance'` |
 | `video-v20-flash`, `video-v20-cinematic`, `video-ai`          | `videos.create({ model: 'v2.0-flash' })`, `'v2.0'`, `'v1.1'`  |
 | `status/{id}` (v1 and v2)                                     | `jobs.get(id)` or `jobs.wait(id)`                             |
-| `credits`                                                     | `account.get()`                                               |
+| `credits`                                                     | `account.get()` (`balance_usd`)                               |
 
 v2 takes the image in the request too, as `image`: its bytes, a public link or base64. A
 finished `job_id` also works. The full guide is at

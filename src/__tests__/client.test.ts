@@ -46,7 +46,15 @@ describe('Mnml', () => {
   it('sends the key and the body, and returns data', async () => {
     const f = fakeFetch([
       ok(
-        { id: '1', ids: ['1'], status: 'queued', credits_charged: 25, replayed: false, notes: [] },
+        {
+          id: '1',
+          ids: ['1'],
+          status: 'queued',
+          charged_usd: 0.2475,
+          credits_charged: 25,
+          replayed: false,
+          notes: [],
+        },
         202,
       ),
     ]);
@@ -55,7 +63,7 @@ describe('Mnml', () => {
       prompt: 'Timber facade',
       image: 'https://e.com/a.png',
     });
-    expect(started.credits_charged).toBe(25);
+    expect(started.charged_usd).toBe(0.2475);
     const [call] = f.calls;
     expect(call!.url).toBe('https://api.mnml.ai/v2/renders');
     expect(header(call!, 'authorization')).toBe('Bearer mk_live_x');
@@ -68,7 +76,14 @@ describe('Mnml', () => {
   });
 
   it('sends bytes as a base64 data URI, and a string as it is', async () => {
-    const started = { id: '1', status: 'queued', credits_charged: 25, replayed: false, notes: [] };
+    const started = {
+      id: '1',
+      status: 'queued',
+      charged_usd: 0.2475,
+      credits_charged: 25,
+      replayed: false,
+      notes: [],
+    };
     const f = fakeFetch([ok({ ...started, ids: ['1'] }, 202), ok(started, 202), ok(started, 202)]);
     const mnml = new Mnml({ apiKey: 'k', fetch: f.impl });
     const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
@@ -144,7 +159,17 @@ describe('Mnml', () => {
     vi.useFakeTimers();
     const f = fakeFetch([
       fail(429, 'RATE_LIMITED', { 'retry-after': '2' }),
-      ok({ id: '7', status: 'queued', credits_charged: 5, replayed: false, notes: [] }, 202),
+      ok(
+        {
+          id: '7',
+          status: 'queued',
+          charged_usd: 0.0495,
+          credits_charged: 5,
+          replayed: false,
+          notes: [],
+        },
+        202,
+      ),
     ]);
     const mnml = new Mnml({ apiKey: 'k', fetch: f.impl });
     const p = mnml.edits.create({ job_id: '3', prompt: 'Dark brick' });
@@ -286,7 +311,15 @@ describe('Mnml', () => {
         jobs: [done],
       }),
       ok(
-        { id: '8', ids: ['8'], status: 'queued', credits_charged: 25, replayed: false, notes: [] },
+        {
+          id: '8',
+          ids: ['8'],
+          status: 'queued',
+          charged_usd: 0.2475,
+          credits_charged: 25,
+          replayed: false,
+          notes: [],
+        },
         202,
       ),
     ]);
@@ -301,7 +334,17 @@ describe('Mnml', () => {
 
   it('starts an edit and returns the settled job', async () => {
     const f = fakeFetch([
-      ok({ id: '5', status: 'queued', credits_charged: 1, replayed: false, notes: [] }, 202),
+      ok(
+        {
+          id: '5',
+          status: 'queued',
+          charged_usd: 0.0099,
+          credits_charged: 1,
+          replayed: false,
+          notes: [],
+        },
+        202,
+      ),
       ok({ id: '5', status: 'failed', outputs: [], error: { code: 'NO_CHANGE', message: 'm' } }),
     ]);
     const job = await new Mnml({ apiKey: 'k', fetch: f.impl }).edits.createAndWait({

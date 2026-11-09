@@ -7,6 +7,7 @@ export async function POST(request: Request): Promise<Response> {
     const event = verifyWebhook(body, request.headers, process.env.MNML_WEBHOOK_SECRET!);
     if (event.type === 'credits.low') {
       // Time to top up: https://developers.mnml.ai/console/billing
+      console.warn(`mnml balance is down to $${event.data.balance_usd}`);
     }
     return new Response(null, { status: 204 });
   } catch (err) {

@@ -45,6 +45,7 @@ type Operation = {
 };
 type Schema = {
   properties?: Record<string, Schema>;
+  deprecated?: boolean;
   items?: Schema;
   enum?: string[];
   anyOf?: Schema[];
@@ -171,6 +172,7 @@ describe('the SDK covers the spec', () => {
         id: 1,
         ids: 1,
         status: 1,
+        charged_usd: 1,
         credits_charged: 1,
         replayed: 1,
         notes: 1,
@@ -179,7 +181,14 @@ describe('the SDK covers the spec', () => {
     ).toEqual(dataKeys('createRender'));
     for (const id of ['createEdit', 'createEnhancement', 'createVideo']) {
       expect(
-        keys<JobStarted>({ id: 1, status: 1, credits_charged: 1, replayed: 1, notes: 1 }),
+        keys<JobStarted>({
+          id: 1,
+          status: 1,
+          charged_usd: 1,
+          credits_charged: 1,
+          replayed: 1,
+          notes: 1,
+        }),
       ).toEqual(dataKeys(id));
     }
     expect(
@@ -189,6 +198,8 @@ describe('the SDK covers the spec', () => {
         kind: 1,
         engine: 1,
         outputs: 1,
+        charged_usd: 1,
+        refunded_usd: 1,
         credits_charged: 1,
         credits_refunded: 1,
         error: 1,
@@ -196,25 +207,35 @@ describe('the SDK covers the spec', () => {
         completed_at: 1,
       }),
     ).toEqual(dataKeys('getJob'));
-    expect(keys<JobCanceled>({ id: 1, outcome: 1, credits_refunded: 1 })).toEqual(
+    expect(keys<JobCanceled>({ id: 1, outcome: 1, refunded_usd: 1, credits_refunded: 1 })).toEqual(
       dataKeys('cancelJob'),
     );
     expect(
-      keys<Account>({ id: 1, email: 1, name: 1, tier: 1, credits: 1, key: 1, limits: 1 }),
+      keys<Account>({
+        id: 1,
+        email: 1,
+        name: 1,
+        tier: 1,
+        balance_usd: 1,
+        credits: 1,
+        key: 1,
+        limits: 1,
+      }),
     ).toEqual(dataKeys('getAccount'));
   });
 
   it('types the nested answers: account, engines, video models, job outputs', () => {
     const account = data('getAccount').properties!;
-    expect(keys<AccountKey>({ id: 1, allowed_origins: 1, daily_credit_limit: 1 })).toEqual(
-      keysOf(account['key']!),
-    );
+    expect(
+      keys<AccountKey>({ id: 1, allowed_origins: 1, daily_limit_usd: 1, daily_credit_limit: 1 }),
+    ).toEqual(keysOf(account['key']!));
     expect(
       keys<AccountLimits>({
         scope: 1,
         requests_per_minute: 1,
         reads_per_minute: 1,
         concurrent_jobs: 1,
+        daily_usd: 1,
         daily_credits: 1,
       }),
     ).toEqual(keysOf(account['limits']!));
@@ -232,7 +253,9 @@ describe('the SDK covers the spec', () => {
         capabilities: 1,
       }),
     ).toEqual(keysOf(engines['engines']!));
-    expect(keys<EnginePrices>({ render: 1, edit: 1 })).toEqual(keysOf(engine['prices']!));
+    expect(keys<EnginePrices>({ render_usd: 1, edit_usd: 1, render: 1, edit: 1 })).toEqual(
+      keysOf(engine['prices']!),
+    );
     expect(
       keys<EngineCapabilities>({
         text_to_render: 1,
@@ -245,12 +268,49 @@ describe('the SDK covers the spec', () => {
     expect(keys<VideoModel>({ id: 1, name: 1, default: 1, available: 1, prices: 1 })).toEqual(
       keysOf(video),
     );
-    expect(keys<VideoPrice>({ duration_seconds: 1, credits: 1 })).toEqual(
+    expect(keys<VideoPrice>({ duration_seconds: 1, usd: 1, credits: 1 })).toEqual(
       keysOf(video.items!.properties!['prices']!),
     );
     const job = data('getJob').properties!;
     expect(keys<JobOutput>({ url: 1, media: 1, expires_at: 1 })).toEqual(keysOf(job['outputs']!));
     expect(keys<JobError>({ code: 1, message: 1 })).toEqual(keysOf(job['error']!));
+  });
+
+  it('deprecates exactly the answer fields the spec deprecates', () => {
+    // Each of these carries `@deprecated` in src/types.ts, naming its dollar field.
+    const DEPRECATED = [
+      'cancelJob: credits_refunded',
+      'createEdit: credits_charged',
+      'createEnhancement: credits_charged',
+      'createRender: credits_charged',
+      'createRender: jobs[].credits_charged',
+      'createRender: jobs[].credits_refunded',
+      'createVideo: credits_charged',
+      'getAccount: credits',
+      'getAccount: credits.spendable',
+      'getAccount: key.daily_credit_limit',
+      'getAccount: limits.daily_credits',
+      'getJob: credits_charged',
+      'getJob: credits_refunded',
+      'listEngines: engines[].prices.edit',
+      'listEngines: engines[].prices.render',
+      'listEngines: video_models[].prices[].credits',
+    ];
+    const found: string[] = [];
+    const walk = (id: string, schema: Schema, path: string) => {
+      const s = schema.items ?? schema.anyOf?.find((m) => m.properties) ?? schema;
+      const at = schema.items ? `${path}[]` : path;
+      for (const [k, v] of Object.entries(s.properties ?? {})) {
+        const p = at ? `${at}.${k}` : k;
+        if (v.deprecated) found.push(`${id}: ${p}`);
+        walk(id, v, p);
+      }
+    };
+    for (const id of Object.keys(COVERED)) {
+      if (id === 'streamJob') continue;
+      walk(id, data(id), '');
+    }
+    expect(found.sort()).toEqual(DEPRECATED);
   });
 
   it('names every value the API takes or answers with', () => {

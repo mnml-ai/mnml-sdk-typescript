@@ -4,7 +4,26 @@ All notable changes to this package are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
-## 0.1.0 — unreleased
+## 0.2.0 — unreleased
+
+Amounts in US dollars. API v2 now answers every amount in dollars beside the credits; the SDK
+types the dollar fields and steers you to them. Nothing is removed, so 0.1.0 code still
+compiles.
+
+- New fields, each a number of US dollars to four decimals: `charged_usd` on every create call
+  (`RenderStarted`, `JobStarted`); `charged_usd` and `refunded_usd` on `Job`; `refunded_usd` on
+  `JobCanceled`; `balance_usd`, `key.daily_limit_usd` and `limits.daily_usd` on `Account`;
+  `render_usd` and `edit_usd` on `EnginePrices`; `usd` on `VideoPrice`; `balance_usd` and
+  `threshold_usd` on the `credits.low` webhook's `CreditsLow`.
+- Deprecated (`@deprecated`, removed in a later release): `credits_charged`,
+  `credits_refunded`, `Account.credits` (`AccountCredits.spendable`), `daily_credit_limit`,
+  `daily_credits`, `EnginePrices.render` and `edit`, `VideoPrice.credits`, and
+  `CreditsLow.balance` and `threshold`. Each names the dollar field to read instead.
+- `spec/openapi.json` refreshed (Nov 9 2026). The coverage test now also checks that the SDK
+  deprecates exactly the fields the spec does.
+- README and examples read the dollar fields.
+
+## 0.1.0
 
 First release.
 
