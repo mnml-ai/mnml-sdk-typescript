@@ -18,7 +18,7 @@ try {
     const file = await mnml.files.download(job.outputs[0]!);
     const ext = file.contentType?.split('/')[1] ?? 'jpg';
     await writeFile(`render-${job.id}.${ext}`, file.data);
-    console.log(`Saved render-${job.id}.${ext} (${job.credits_charged} credits)`);
+    console.log(`Saved render-${job.id}.${ext} ($${job.charged_usd})`);
   } else {
     console.log(`Job ${job?.status}: ${job?.error?.message ?? ''}`);
   }

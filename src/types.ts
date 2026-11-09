@@ -144,6 +144,9 @@ export type CreateVideo = Common &
 export interface JobStarted {
   id: string;
   status: JobStatus;
+  /** What the call charged, in US dollars (four decimals). */
+  charged_usd: number;
+  /** @deprecated Read `charged_usd`. The same amount in API credits ($0.0099 each); a later release removes it. */
   credits_charged: number;
   /** True when this answers an earlier identical request: nothing new was charged. */
   replayed: boolean;
@@ -181,7 +184,13 @@ export interface Job {
   kind: string;
   engine: string | null;
   outputs: JobOutput[];
+  /** What the job charged, in US dollars (four decimals). */
+  charged_usd: number;
+  /** What came back to the balance, in US dollars (four decimals). */
+  refunded_usd: number;
+  /** @deprecated Read `charged_usd`. The same amount in API credits ($0.0099 each); a later release removes it. */
   credits_charged: number;
+  /** @deprecated Read `refunded_usd`. The same amount in API credits ($0.0099 each); a later release removes it. */
   credits_refunded: number;
   error: JobError | null;
   created_at: string;
@@ -201,18 +210,24 @@ export type JobStreamEvent =
 export interface JobCanceled {
   id: string;
   outcome: 'refunded' | 'requested' | 'too-late' | 'already-settled';
+  /** What came back to the balance, in US dollars (four decimals). */
+  refunded_usd: number;
+  /** @deprecated Read `refunded_usd`. The same amount in API credits ($0.0099 each); a later release removes it. */
   credits_refunded: number;
 }
 
+/** @deprecated Read `Account.balance_usd`. */
 export interface AccountCredits {
-  /** What the next call can spend. */
+  /** @deprecated Read `balance_usd`. The same amount in API credits ($0.0099 each); a later release removes it. */
   spendable: number;
 }
 
 export interface AccountKey {
   id: string;
   allowed_origins: string[];
-  /** Your own daily limit for this key, or null for none. */
+  /** Your own daily limit for this key in US dollars, or null for none. */
+  daily_limit_usd: number | null;
+  /** @deprecated Read `daily_limit_usd`. The same amount in API credits ($0.0099 each); a later release removes it. */
   daily_credit_limit: number | null;
 }
 
@@ -223,7 +238,9 @@ export interface AccountLimits {
   /** GET requests (job polls included), counted apart from the rest. */
   reads_per_minute: number;
   concurrent_jobs: number;
-  /** Credits this key may still spend per UTC day; null is no limit. */
+  /** US dollars this key may still spend per UTC day; null is no limit. */
+  daily_usd: number | null;
+  /** @deprecated Read `daily_usd`. The same amount in API credits ($0.0099 each); a later release removes it. */
   daily_credits: number | null;
 }
 
@@ -231,17 +248,24 @@ export interface Account {
   id: string;
   email: string;
   name: string | null;
-  /** `paid` once the account has bought credits; it sets the limits. */
+  /** `paid` once the account has topped up; it sets the limits. */
   tier: 'free' | 'paid';
+  /** What the next call can spend, in US dollars (four decimals). */
+  balance_usd: number;
+  /** @deprecated Read `balance_usd`. The same amount in API credits ($0.0099 each); a later release removes it. */
   credits: AccountCredits;
   key: AccountKey;
   limits: AccountLimits;
 }
 
 export interface EnginePrices {
-  /** Credits for one render. */
+  /** One render, in US dollars (four decimals). */
+  render_usd: number;
+  /** One edit, in US dollars (four decimals). */
+  edit_usd: number;
+  /** @deprecated Read `render_usd`. The same amount in API credits ($0.0099 each); a later release removes it. */
   render: number;
-  /** Credits for one edit. */
+  /** @deprecated Read `edit_usd`. The same amount in API credits ($0.0099 each); a later release removes it. */
   edit: number;
 }
 
@@ -267,6 +291,9 @@ export interface Engine {
 export interface VideoPrice {
   /** null is the model's one fixed length. */
   duration_seconds: number | null;
+  /** One clip of this length, in US dollars (four decimals). */
+  usd: number;
+  /** @deprecated Read `usd`. The same amount in API credits ($0.0099 each); a later release removes it. */
   credits: number;
 }
 
@@ -286,7 +313,13 @@ export interface Engines {
 
 /** `credits.low`: the balance fell under the threshold (sent at most once a day). */
 export interface CreditsLow {
+  /** The balance now, in US dollars (four decimals). */
+  balance_usd: number;
+  /** The line it fell under, in US dollars. */
+  threshold_usd: number;
+  /** @deprecated Read `balance_usd`. The same amount in API credits ($0.0099 each); a later release removes it. */
   balance: number;
+  /** @deprecated Read `threshold_usd`. The same amount in API credits ($0.0099 each); a later release removes it. */
   threshold: number;
 }
 

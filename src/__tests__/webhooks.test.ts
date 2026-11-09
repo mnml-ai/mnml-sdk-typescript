@@ -60,7 +60,7 @@ describe('webhook verification', () => {
     const low = JSON.stringify({
       type: 'credits.low',
       timestamp: now.toISOString(),
-      data: { balance: 40, threshold: 100 },
+      data: { balance_usd: 0.396, threshold_usd: 0.99, balance: 40, threshold: 100 },
     });
     const event = verifyWebhook(
       low,
@@ -69,6 +69,6 @@ describe('webhook verification', () => {
       now,
     );
     if (event.type !== 'credits.low') throw new Error('expected credits.low');
-    expect(event.data.balance).toBeLessThan(event.data.threshold);
+    expect(event.data.balance_usd).toBeLessThan(event.data.threshold_usd);
   });
 });
