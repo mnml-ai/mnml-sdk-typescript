@@ -890,6 +890,12 @@
                           "deprecated": true,
                           "description": "Deprecated: read `charged_usd`. The same amount in API credits ($0.0099 each)."
                         },
+                        "list_usd": {
+                          "type": "number"
+                        },
+                        "discount_percent": {
+                          "type": "number"
+                        },
                         "replayed": {
                           "type": "boolean"
                         },
@@ -972,6 +978,12 @@
                                 "deprecated": true,
                                 "description": "Deprecated: read `refunded_usd`. The same amount in API credits ($0.0099 each)."
                               },
+                              "list_usd": {
+                                "type": "number"
+                              },
+                              "discount_percent": {
+                                "type": "number"
+                              },
                               "error": {
                                 "anyOf": [
                                   {
@@ -1020,6 +1032,8 @@
                               "refunded_usd",
                               "credits_charged",
                               "credits_refunded",
+                              "list_usd",
+                              "discount_percent",
                               "error",
                               "created_at",
                               "completed_at"
@@ -1033,6 +1047,8 @@
                         "status",
                         "charged_usd",
                         "credits_charged",
+                        "list_usd",
+                        "discount_percent",
                         "replayed",
                         "notes"
                       ]
@@ -1106,6 +1122,12 @@
                           "deprecated": true,
                           "description": "Deprecated: read `charged_usd`. The same amount in API credits ($0.0099 each)."
                         },
+                        "list_usd": {
+                          "type": "number"
+                        },
+                        "discount_percent": {
+                          "type": "number"
+                        },
                         "replayed": {
                           "type": "boolean"
                         },
@@ -1188,6 +1210,12 @@
                                 "deprecated": true,
                                 "description": "Deprecated: read `refunded_usd`. The same amount in API credits ($0.0099 each)."
                               },
+                              "list_usd": {
+                                "type": "number"
+                              },
+                              "discount_percent": {
+                                "type": "number"
+                              },
                               "error": {
                                 "anyOf": [
                                   {
@@ -1236,6 +1264,8 @@
                               "refunded_usd",
                               "credits_charged",
                               "credits_refunded",
+                              "list_usd",
+                              "discount_percent",
                               "error",
                               "created_at",
                               "completed_at"
@@ -1249,6 +1279,8 @@
                         "status",
                         "charged_usd",
                         "credits_charged",
+                        "list_usd",
+                        "discount_percent",
                         "replayed",
                         "notes"
                       ]
@@ -1707,6 +1739,12 @@
                           "deprecated": true,
                           "description": "Deprecated: read `charged_usd`. The same amount in API credits ($0.0099 each)."
                         },
+                        "list_usd": {
+                          "type": "number"
+                        },
+                        "discount_percent": {
+                          "type": "number"
+                        },
                         "replayed": {
                           "type": "boolean"
                         },
@@ -1722,6 +1760,8 @@
                         "status",
                         "charged_usd",
                         "credits_charged",
+                        "list_usd",
+                        "discount_percent",
                         "replayed",
                         "notes"
                       ]
@@ -1976,6 +2016,12 @@
                           "deprecated": true,
                           "description": "Deprecated: read `charged_usd`. The same amount in API credits ($0.0099 each)."
                         },
+                        "list_usd": {
+                          "type": "number"
+                        },
+                        "discount_percent": {
+                          "type": "number"
+                        },
                         "replayed": {
                           "type": "boolean"
                         },
@@ -1991,6 +2037,8 @@
                         "status",
                         "charged_usd",
                         "credits_charged",
+                        "list_usd",
+                        "discount_percent",
                         "replayed",
                         "notes"
                       ]
@@ -2075,6 +2123,11 @@
                     "maxLength": 16
                   },
                   "prompt": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4000
+                  },
+                  "raw_prompt": {
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 4000
@@ -2177,6 +2230,11 @@
                     "maxLength": 16
                   },
                   "prompt": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4000
+                  },
+                  "raw_prompt": {
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 4000
@@ -2289,6 +2347,12 @@
                           "deprecated": true,
                           "description": "Deprecated: read `charged_usd`. The same amount in API credits ($0.0099 each)."
                         },
+                        "list_usd": {
+                          "type": "number"
+                        },
+                        "discount_percent": {
+                          "type": "number"
+                        },
                         "replayed": {
                           "type": "boolean"
                         },
@@ -2304,6 +2368,8 @@
                         "status",
                         "charged_usd",
                         "credits_charged",
+                        "list_usd",
+                        "discount_percent",
                         "replayed",
                         "notes"
                       ]
@@ -2462,6 +2528,12 @@
                           "deprecated": true,
                           "description": "Deprecated: read `refunded_usd`. The same amount in API credits ($0.0099 each)."
                         },
+                        "list_usd": {
+                          "type": "number"
+                        },
+                        "discount_percent": {
+                          "type": "number"
+                        },
                         "error": {
                           "anyOf": [
                             {
@@ -2510,6 +2582,8 @@
                         "refunded_usd",
                         "credits_charged",
                         "credits_refunded",
+                        "list_usd",
+                        "discount_percent",
                         "error",
                         "created_at",
                         "completed_at"

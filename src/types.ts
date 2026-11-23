@@ -135,6 +135,11 @@ export type CreateVideo = Common &
     motion?: VideoMotion;
     /** What should happen in the clip, in plain words. */
     prompt?: string;
+    /**
+     * Your own prompt, sent to the model exactly as written, in place of
+     * `prompt`. Nothing is added, so `camera_movement` and `motion` are not applied.
+     */
+    raw_prompt?: string;
     /** A last frame to move towards: the image itself, or a source. */
     end_frame?: ImageInput | Source;
     /** v1.1 only: the Cinematic variant, which needs `end_frame`. */
@@ -148,6 +153,10 @@ export interface JobStarted {
   charged_usd: number;
   /** @deprecated Read `charged_usd`. The same amount in API credits ($0.0099 each); a later release removes it. */
   credits_charged: number;
+  /** The price at list, before your account's API discount, in US dollars. */
+  list_usd: number;
+  /** Your account's API discount on this call, in percent (35.39 means 35.39 % off); 0 when none. */
+  discount_percent: number;
   /** True when this answers an earlier identical request: nothing new was charged. */
   replayed: boolean;
   /** What the API changed or dropped from the request, said back instead of silently. */
@@ -192,6 +201,10 @@ export interface Job {
   credits_charged: number;
   /** @deprecated Read `refunded_usd`. The same amount in API credits ($0.0099 each); a later release removes it. */
   credits_refunded: number;
+  /** The price at list, before your account's API discount, in US dollars. */
+  list_usd: number;
+  /** Your account's API discount on this call, in percent (35.39 means 35.39 % off); 0 when none. */
+  discount_percent: number;
   error: JobError | null;
   created_at: string;
   completed_at: string | null;
